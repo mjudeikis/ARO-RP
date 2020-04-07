@@ -39,6 +39,11 @@ func (i *Installer) removeBootstrapIgnition(ctx context.Context) error {
 	}
 
 	bootstrapIgn := blobService.GetContainerReference("ignition")
-	_, err = bootstrapIgn.DeleteIfExists(&azstorage.DeleteContainerOptions{})
+	deleted, err := bootstrapIgn.DeleteIfExists(&azstorage.DeleteContainerOptions{})
+
+	if deleted {
+		i.log.Info("removed ignition config")
+	}
+
 	return err
 }

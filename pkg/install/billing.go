@@ -23,6 +23,7 @@ func (i *Installer) createBillingRecord(ctx context.Context) error {
 	})
 	// If create return a conflict, this means row is already present in database
 	if err, ok := err.(*cosmosdb.Error); ok && err.StatusCode == http.StatusConflict {
+		i.log.Info("billing record already exists")
 		return nil
 	}
 

@@ -26,6 +26,7 @@ type OpenShiftClusters interface {
 	Create(context.Context, *api.OpenShiftClusterDocument) (*api.OpenShiftClusterDocument, error)
 	Get(context.Context, string) (*api.OpenShiftClusterDocument, error)
 	QueueLength(context.Context, string) (int, error)
+	ListAll(context.Context) (*api.OpenShiftClusterDocuments, error)
 	Patch(context.Context, string, func(*api.OpenShiftClusterDocument) error) (*api.OpenShiftClusterDocument, error)
 	PatchWithLease(context.Context, string, func(*api.OpenShiftClusterDocument) error) (*api.OpenShiftClusterDocument, error)
 	Update(context.Context, *api.OpenShiftClusterDocument) (*api.OpenShiftClusterDocument, error)
@@ -238,6 +239,10 @@ func (c *openShiftClusters) ListByPrefix(subscriptionID, prefix, continuation st
 		},
 		&cosmosdb.Options{Continuation: continuation},
 	), nil
+}
+
+func (c *openShiftClusters) ListAll(ctx context.Context) (*api.OpenShiftClusterDocuments, error) {
+	return c.c.ListAll(ctx, nil)
 }
 
 func (c *openShiftClusters) Dequeue(ctx context.Context) (*api.OpenShiftClusterDocument, error) {
