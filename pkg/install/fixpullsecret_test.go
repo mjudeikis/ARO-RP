@@ -52,6 +52,19 @@ func TestFixPullSecret(t *testing.T) {
 			wantUpdated: true,
 		},
 		{
+			name:    "modified custom pull secret",
+			current: []byte(`{"auths":{"quay.io":{"auth":"dGVzdDp0ZXN0Cg=="}}}`),
+			rps: []*api.RegistryProfile{
+				{
+					Name:     "arosvc.azurecr.io",
+					Username: "fred",
+					Password: "enter",
+				},
+			},
+			want:        `{"auths":{"arosvc.azurecr.io":{"auth":"ZnJlZDplbnRlcg=="},"quay.io":{"auth":"dGVzdDp0ZXN0Cg=="}}}`,
+			wantUpdated: true,
+		},
+		{
 			name:    "no change",
 			current: []byte(`{"auths":{"arosvc.azurecr.io":{"auth":"ZnJlZDplbnRlcg=="}}}`),
 			rps: []*api.RegistryProfile{
@@ -66,18 +79,27 @@ func TestFixPullSecret(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var updated bool
-
-			fakecli := fake.NewSimpleClientset(&v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pull-secret",
-					Namespace: "openshift-config",
-				},
-				Data: map[string][]byte{
-					v1.DockerConfigJsonKey: tt.current,
-				},
-			})
+			var secret *v1.Secret
+			if len(tt.current) > 0 {
+				secret = &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pull-secret",
+						Namespace: "openshift-config",
+					},
+					Data: map[string][]byte{
+						v1.DockerConfigJsonKey: tt.current,
+					},
+				}
+			} else {
+				secret = &v1.Secret{}
+			}
+			fakecli := fake.NewSimpleClientset(secret)
 
 			fakecli.PrependReactor("update", "secrets", func(action ktesting.Action) (handled bool, ret runtime.Object, err error) {
+				updated = true
+				return false, nil, nil
+			})
+			fakecli.PrependReactor("create", "secrets", func(action ktesting.Action) (handled bool, ret runtime.Object, err error) {
 				updated = true
 				return false, nil, nil
 			})
