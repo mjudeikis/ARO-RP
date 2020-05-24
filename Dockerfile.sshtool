@@ -1,0 +1,9 @@
+FROM registry.access.redhat.com/ubi8/ubi
+RUN \
+  rpm --import https://packages.microsoft.com/keys/microsoft.asc && \
+  echo -e '[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli' >/etc/yum.repos.d/azure-cli.repo && \
+  dnf -y update && \
+  dnf -y --enablerepo=rhocp-4.4-for-rhel-8-x86_64-rpms install azure-cli less openshift-clients openssh-clients && \
+  dnf clean all
+COPY sshtool /usr/local/bin
+ENTRYPOINT ["sshtool"]

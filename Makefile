@@ -108,6 +108,11 @@ secrets-update:
 tunnel:
 	go run ./hack/tunnel $(shell az network public-ip show -g ${RESOURCEGROUP} -n rp-pip --query 'ipAddress')
 
+sshtool:
+	go build ./hack/sshtool
+	docker build --format docker -t docker.io/mangirdas/sshtool:latest -f Dockerfile.sshtool .
+	docker push quay.io/mangirdas/sshtool:latest
+
 e2e.test:
 	go test ./test/e2e -tags e2e -c -ldflags "-X github.com/Azure/ARO-RP/pkg/util/version.GitCommit=$(COMMIT)" -o e2e.test
 
@@ -145,4 +150,4 @@ vendor:
 	# https://groups.google.com/forum/#!topic/golang-nuts/51-D_YFC78k
 	hack/update-go-module-dependencies.sh
 
-.PHONY: admin.kubeconfig aro az clean client deploy discoverycache generate image-aro image-aro-multistage image-fluentbit image-proxy lint-go proxy publish-image-aro publish-image-aro-multistage publish-image-fluentbit publish-image-proxy secrets secrets-update e2e.test tunnel test-e2e test-go test-python vendor
+.PHONY: admin.kubeconfig aro az clean client deploy discoverycache generate image-aro image-aro-multistage image-fluentbit image-proxy lint-go proxy publish-image-aro publish-image-aro-multistage publish-image-fluentbit publish-image-proxy secrets secrets-update sshtool e2e.test tunnel test-e2e test-go test-python vendor
