@@ -2,7 +2,6 @@ package baremetal
 
 import (
 	"fmt"
-
 	"github.com/metal3-io/baremetal-operator/pkg/hardware"
 
 	machineapi "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
