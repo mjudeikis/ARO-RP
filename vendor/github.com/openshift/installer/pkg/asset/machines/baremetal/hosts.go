@@ -2,6 +2,7 @@ package baremetal
 
 import (
 	"fmt"
+
 	"github.com/metal3-io/baremetal-operator/pkg/hardware"
 
 	machineapi "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
@@ -70,8 +71,9 @@ func Hosts(config *types.InstallConfig, machines []machineapi.Machine) (*HostSet
 			Spec: baremetalhost.BareMetalHostSpec{
 				Online: true,
 				BMC: baremetalhost.BMCDetails{
-					Address:         host.BMC.Address,
-					CredentialsName: secret.Name,
+					Address:                        host.BMC.Address,
+					CredentialsName:                secret.Name,
+					DisableCertificateVerification: host.BMC.DisableCertificateVerification,
 				},
 				BootMACAddress:  host.BootMACAddress,
 				HardwareProfile: host.HardwareProfile,
