@@ -66,7 +66,12 @@ func TestEmitNodeConditions(t *testing.T) {
 		"type":   "Ready",
 	})
 
-	err := mon.emitNodeConditions(ctx)
+	err := mon.initCache(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = mon.emitNodeConditions(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

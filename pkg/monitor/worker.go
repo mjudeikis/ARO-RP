@@ -153,6 +153,7 @@ func (mon *monitor) worker(stop <-chan struct{}, delay time.Duration, id string)
 	defer t.Stop()
 
 	h := time.Now().Hour()
+	d := time.Now().Day()
 
 out:
 	for {
@@ -166,12 +167,13 @@ out:
 		}
 
 		newh := time.Now().Hour()
+		newd := time.Now().Day()
 
 		// TODO: later can modify here to poll once per N minutes and re-issue
 		// cached metrics in the remaining minutes
 
 		if sub != nil && sub.Subscription != nil && sub.Subscription.State != api.SubscriptionStateSuspended && sub.Subscription.State != api.SubscriptionStateWarned {
-			mon.workOne(context.Background(), log, v.doc, newh != h)
+			mon.workOne(context.Background(), log, v.doc, newh != h, d != newd)
 		}
 
 		select {
@@ -181,17 +183,18 @@ out:
 		}
 
 		h = newh
+		d = newd
 	}
 
 	log.Debug("stopping monitoring")
 }
 
 // workOne checks the API server health of a cluster
-func (mon *monitor) workOne(ctx context.Context, log *logrus.Entry, doc *api.OpenShiftClusterDocument, logMessages bool) {
+func (mon *monitor) workOne(ctx context.Context, log *logrus.Entry, doc *api.OpenShiftClusterDocument, hourlyRun, dailyRun bool) {
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
 
-	c, err := cluster.NewMonitor(ctx, mon.env, log, doc.OpenShiftCluster, mon.clusterm, logMessages)
+	c, err := cluster.NewMonitor(ctx, mon.env, log, doc.OpenShiftCluster, mon.clusterm, hourlyRun, dailyRun)
 	if err != nil {
 		log.Error(err)
 		return

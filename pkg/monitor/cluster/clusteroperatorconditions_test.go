@@ -62,7 +62,11 @@ func TestEmitClusterOperatorConditions(t *testing.T) {
 				},
 			},
 		},
-	})
+	},
+		&configv1.ClusterVersion{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "version",
+			}})
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -105,8 +109,11 @@ func TestEmitClusterOperatorConditions(t *testing.T) {
 		"type":   "dummy",
 		"status": "True",
 	})
-
-	err := mon.emitClusterOperatorConditions(ctx)
+	err := mon.initCache(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = mon.emitClusterOperatorConditions(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
