@@ -44,8 +44,8 @@ type Monitor struct {
 
 // cache is used to store repeatable api call results for other metrics to re-use
 type cache struct {
-	cos *configv1.ClusterOperatorList // used 2 times
-	cv  *configv1.ClusterVersion      // used 4 times
+	cos *configv1.ClusterOperatorList
+	cv  *configv1.ClusterVersion
 	ns  *v1.NodeList
 }
 

@@ -18,51 +18,52 @@ import (
 func TestEmitClusterOperatorConditions(t *testing.T) {
 	ctx := context.Background()
 
-	configcli := fake.NewSimpleClientset(&configv1.ClusterOperator{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "console",
-		},
-		Status: configv1.ClusterOperatorStatus{
-			Conditions: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionTrue,
-				},
-				{
-					Type:   configv1.OperatorDegraded,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorDegraded,
-					Status: configv1.ConditionTrue,
-				},
-				{
-					Type:   configv1.OperatorProgressing,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorProgressing,
-					Status: configv1.ConditionTrue,
-				},
-				{
-					Type:   configv1.OperatorUpgradeable,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorUpgradeable,
-					Status: configv1.ConditionTrue,
-				},
-				{
-					Type:   "dummy",
-					Status: configv1.ConditionTrue,
+	configcli := fake.NewSimpleClientset(
+		&configv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "console",
+			},
+			Status: configv1.ClusterOperatorStatus{
+				Conditions: []configv1.ClusterOperatorStatusCondition{
+					{
+						Type:   configv1.OperatorAvailable,
+						Status: configv1.ConditionFalse,
+					},
+					{
+						Type:   configv1.OperatorAvailable,
+						Status: configv1.ConditionTrue,
+					},
+					{
+						Type:   configv1.OperatorDegraded,
+						Status: configv1.ConditionFalse,
+					},
+					{
+						Type:   configv1.OperatorDegraded,
+						Status: configv1.ConditionTrue,
+					},
+					{
+						Type:   configv1.OperatorProgressing,
+						Status: configv1.ConditionFalse,
+					},
+					{
+						Type:   configv1.OperatorProgressing,
+						Status: configv1.ConditionTrue,
+					},
+					{
+						Type:   configv1.OperatorUpgradeable,
+						Status: configv1.ConditionFalse,
+					},
+					{
+						Type:   configv1.OperatorUpgradeable,
+						Status: configv1.ConditionTrue,
+					},
+					{
+						Type:   "dummy",
+						Status: configv1.ConditionTrue,
+					},
 				},
 			},
 		},
-	},
 		&configv1.ClusterVersion{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "version",

@@ -29,6 +29,9 @@ func TestEmitNodeConditions(t *testing.T) {
 					Status: corev1.ConditionTrue,
 				},
 			},
+			NodeInfo: corev1.NodeSystemInfo{
+				KubeletVersion: "v1.17.1+9d33dd3",
+			},
 		},
 	}, &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -40,6 +43,9 @@ func TestEmitNodeConditions(t *testing.T) {
 					Type:   corev1.NodeReady,
 					Status: corev1.ConditionFalse,
 				},
+			},
+			NodeInfo: corev1.NodeSystemInfo{
+				KubeletVersion: "v1.17.1+9d33dd3",
 			},
 		},
 	})
@@ -56,14 +62,16 @@ func TestEmitNodeConditions(t *testing.T) {
 
 	m.EXPECT().EmitGauge("node.count", int64(2), map[string]string{})
 	m.EXPECT().EmitGauge("node.conditions", int64(1), map[string]string{
-		"name":   "aro-master-0",
-		"status": "True",
-		"type":   "MemoryPressure",
+		"name":           "aro-master-0",
+		"kubeletVersion": "v1.17.1+9d33dd3",
+		"status":         "True",
+		"type":           "MemoryPressure",
 	})
 	m.EXPECT().EmitGauge("node.conditions", int64(1), map[string]string{
-		"name":   "aro-master-1",
-		"status": "False",
-		"type":   "Ready",
+		"name":           "aro-master-1",
+		"kubeletVersion": "v1.17.1+9d33dd3",
+		"status":         "False",
+		"type":           "Ready",
 	})
 
 	err := mon.initCache(ctx)

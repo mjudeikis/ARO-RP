@@ -27,18 +27,20 @@ func (mon *Monitor) emitNodeConditions(ctx context.Context) error {
 			}
 
 			mon.emitGauge("node.conditions", 1, map[string]string{
-				"name":   n.Name,
-				"status": string(c.Status),
-				"type":   string(c.Type),
+				"name":           n.Name,
+				"kubeletVersion": n.Status.NodeInfo.KubeletVersion,
+				"status":         string(c.Status),
+				"type":           string(c.Type),
 			})
 
 			if mon.hourlyRun {
 				mon.log.WithFields(logrus.Fields{
-					"metric":  "node.conditions",
-					"name":    n.Name,
-					"status":  c.Status,
-					"type":    c.Type,
-					"message": c.Message,
+					"metric":         "node.conditions",
+					"kubeletVersion": n.Status.NodeInfo.KubeletVersion,
+					"name":           n.Name,
+					"status":         c.Status,
+					"type":           c.Type,
+					"message":        c.Message,
 				}).Print()
 			}
 		}
