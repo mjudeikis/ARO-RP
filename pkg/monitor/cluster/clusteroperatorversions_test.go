@@ -62,12 +62,7 @@ func TestEmitClusterOperatorVersion(t *testing.T) {
 		"version": "4.3.0",
 	})
 
-	err := mon.initCache(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = mon.emitClusterOperatorVersions(ctx)
+	err := mon.emitClusterOperatorVersions(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

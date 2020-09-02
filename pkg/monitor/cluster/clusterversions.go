@@ -10,8 +10,12 @@ import (
 )
 
 func (mon *Monitor) emitClusterVersions(ctx context.Context) error {
+	cv, err := mon.getClusterVersion()
+	if err != nil {
+		return err
+	}
 	mon.emitGauge("cluster.versions", 1, map[string]string{
-		"actualVersion":           actualVersion(mon.cache.cv),
+		"actualVersion":           actualVersion(cv),
 		"desiredVersion":          desiredVersion(mon.cache.cv),
 		"resourceProviderVersion": mon.oc.Properties.ProvisionedBy,
 	})

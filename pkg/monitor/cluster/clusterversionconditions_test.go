@@ -99,12 +99,7 @@ func TestEmitClusterVersionConditions(t *testing.T) {
 		"status": "True",
 	})
 
-	err := mon.initCache(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = mon.emitClusterVersionConditions(ctx)
+	err := mon.emitClusterVersionConditions(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

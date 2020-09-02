@@ -118,12 +118,7 @@ func TestEmitClusterVersion(t *testing.T) {
 				"resourceProviderVersion": tt.wantResourceProviderVersion,
 			})
 
-			err := mon.initCache(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			err = mon.emitClusterVersions(ctx)
+			err := mon.emitClusterVersions(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

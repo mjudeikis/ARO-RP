@@ -18,9 +18,14 @@ var nodeConditionsExpected = map[v1.NodeConditionType]v1.ConditionStatus{
 }
 
 func (mon *Monitor) emitNodeConditions(ctx context.Context) error {
-	mon.emitGauge("node.count", int64(len(mon.cache.ns.Items)), nil)
+	ns, err := mon.listNodes()
+	if err != nil {
+		return err
+	}
 
-	for _, n := range mon.cache.ns.Items {
+	mon.emitGauge("node.count", int64(len(ns.Items)), nil)
+
+	for _, n := range ns.Items {
 		for _, c := range n.Status.Conditions {
 			if c.Status == nodeConditionsExpected[c.Type] {
 				continue

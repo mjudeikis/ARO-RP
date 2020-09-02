@@ -81,12 +81,7 @@ func TestEmitNodeConditions(t *testing.T) {
 		"kubeletVersion": "v1.17.1+9d33dd3",
 	})
 
-	err := mon.initCache(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = mon.emitNodeConditions(ctx)
+	err := mon.emitNodeConditions(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,7 +28,6 @@ type Monitor struct {
 	env       env.Interface
 	log       *logrus.Entry
 	hourlyRun bool
-	dailyRun  bool
 
 	oc   *api.OpenShiftCluster
 	dims map[string]string
@@ -39,17 +38,15 @@ type Monitor struct {
 	m         metrics.Interface
 	arocli    aroclient.AroV1alpha1Interface
 
-	cache cache
+	// access below only via the helper functions in cache.go
+	cache struct {
+		cos *configv1.ClusterOperatorList
+		cv  *configv1.ClusterVersion
+		ns  *v1.NodeList
+	}
 }
 
-// cache is used to store repeatable api call results for other metrics to re-use
-type cache struct {
-	cos *configv1.ClusterOperatorList
-	cv  *configv1.ClusterVersion
-	ns  *v1.NodeList
-}
-
-func NewMonitor(ctx context.Context, env env.Interface, log *logrus.Entry, oc *api.OpenShiftCluster, m metrics.Interface, hourlyRun, dailyRun bool) (*Monitor, error) {
+func NewMonitor(ctx context.Context, env env.Interface, log *logrus.Entry, oc *api.OpenShiftCluster, m metrics.Interface, hourlyRun bool) (*Monitor, error) {
 	r, err := azure.ParseResourceID(oc.ID)
 	if err != nil {
 		return nil, err
@@ -99,7 +96,6 @@ func NewMonitor(ctx context.Context, env env.Interface, log *logrus.Entry, oc *a
 		env:       env,
 		log:       log,
 		hourlyRun: hourlyRun,
-		dailyRun:  dailyRun,
 
 		oc:   oc,
 		dims: dims,
@@ -127,7 +123,6 @@ func (mon *Monitor) Monitor(ctx context.Context) {
 	}
 
 	for _, f := range []func(context.Context) error{
-		mon.initCache, // must run first to initialize cache
 		mon.emitAroOperatorConditions,
 		mon.emitClusterOperatorConditions,
 		mon.emitClusterOperatorVersions,
@@ -140,7 +135,7 @@ func (mon *Monitor) Monitor(ctx context.Context) {
 		mon.emitPodConditions,
 		mon.emitReplicasetStatuses,
 		mon.emitStatefulsetStatuses,
-		mon.emitReportingMetric,
+		mon.emitSummary,
 		mon.emitPrometheusAlerts, // at the end for now because it's the slowest/least reliable
 	} {
 		err = f(ctx)

@@ -18,11 +18,15 @@ var clusterVersionConditionsExpected = map[configv1.ClusterStatusConditionType]c
 }
 
 func (mon *Monitor) emitClusterVersionConditions(ctx context.Context) error {
-	for _, c := range mon.cache.cv.Status.Conditions {
+	cv, err := mon.getClusterVersion()
+	if err != nil {
+		return err
+	}
+
+	for _, c := range cv.Status.Conditions {
 		if c.Status == clusterVersionConditionsExpected[c.Type] {
 			continue
 		}
-
 		mon.emitGauge("clusterversion.conditions", 1, map[string]string{
 			"status": string(c.Status),
 			"type":   string(c.Type),
@@ -37,6 +41,5 @@ func (mon *Monitor) emitClusterVersionConditions(ctx context.Context) error {
 			}).Print()
 		}
 	}
-
 	return nil
 }

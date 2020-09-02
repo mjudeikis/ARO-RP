@@ -18,7 +18,7 @@ import (
 	mock_metrics "github.com/Azure/ARO-RP/pkg/util/mocks/metrics"
 )
 
-func TestEmitReportingMetric(t *testing.T) {
+func TestemitSummary(t *testing.T) {
 	ctx := context.Background()
 
 	configcli := configfake.NewSimpleClientset(&configv1.ClusterVersion{
@@ -77,7 +77,7 @@ func TestEmitReportingMetric(t *testing.T) {
 				ProvisioningState: api.ProvisioningStateSucceeded,
 			},
 		},
-		dailyRun: true,
+		hourlyRun: true,
 	}
 
 	m.EXPECT().EmitGauge("cluster.summary", int64(1), map[string]string{
@@ -88,12 +88,7 @@ func TestEmitReportingMetric(t *testing.T) {
 		"provisioningState": mon.oc.Properties.ProvisioningState.String(),
 	})
 
-	err := mon.initCache(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = mon.emitReportingMetric(ctx)
+	err := mon.emitSummary(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
