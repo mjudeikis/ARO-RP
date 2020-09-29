@@ -12,7 +12,7 @@ import (
 // LogFunction For big messages, it can be more efficient to pass a function
 // and only call it if the log level is actually enables rather than
 // generating the log message and then checking if the level is enabled
-type LogFunction func()[]interface{}
+type LogFunction func() []interface{}
 
 type Logger struct {
 	// The logs are `io.Copy`'d to this in a mutex. It's common to set this to a
@@ -75,7 +75,7 @@ func (mw *MutexWrap) Disable() {
 //
 //    var log = &logrus.Logger{
 //      Out: os.Stderr,
-//      Formatter: new(logrus.TextFormatter),
+//      Formatter: new(logrus.JSONFormatter),
 //      Hooks: make(logrus.LevelHooks),
 //      Level: logrus.DebugLevel,
 //    }
