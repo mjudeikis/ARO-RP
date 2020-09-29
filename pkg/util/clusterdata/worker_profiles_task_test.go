@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/to"
-	machinev1beta1 "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
-	clusterapi "github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset"
+	machinev1beta1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	clusterapi "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
 	"github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset/fake"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
