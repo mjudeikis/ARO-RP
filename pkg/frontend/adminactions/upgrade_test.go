@@ -23,8 +23,6 @@ import (
 )
 
 func TestUpgradeCluster(t *testing.T) {
-	ctx := context.Background()
-
 	stream43 := version.Stream{
 		Version: version.NewVersion(4, 3, 27),
 	}
@@ -153,6 +151,7 @@ func TestUpgradeCluster(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			version.Streams = append([]version.Stream{}, stream43, stream44, stream45)
 			var updated bool
 
@@ -176,7 +175,7 @@ func TestUpgradeCluster(t *testing.T) {
 				t.Fatal(updated)
 			}
 
-			cv, err := a.configClient.ConfigV1().ClusterVersions().Get("version", metav1.GetOptions{})
+			cv, err := a.configClient.ConfigV1().ClusterVersions().Get(ctx, "version", metav1.GetOptions{})
 			if err != nil {
 				t.Error(err)
 			}

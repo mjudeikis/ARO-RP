@@ -4,15 +4,16 @@ package clusterdata
 // Licensed under the Apache License 2.0.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/to"
-	machinev1beta1 "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
-	clusterapi "github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset"
-	"github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset/fake"
+	machinev1beta1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	clusterapi "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
+	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/fake"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -267,7 +268,7 @@ func TestWorkerProfilesEnricherTask(t *testing.T) {
 
 			callbacks := make(chan func())
 			errors := make(chan error)
-			go e.FetchData(callbacks, errors)
+			go e.FetchData(context.Background(), callbacks, errors)
 
 			select {
 			case f := <-callbacks:

@@ -48,7 +48,7 @@ func TestAdminKubernetesObjectsGetAndDelete(t *testing.T) {
 			objName:      "config",
 			mocks: func(tt *test, a *mock_adminactions.MockInterface) {
 				a.EXPECT().
-					K8sGet(tt.objKind, tt.objNamespace, tt.objName).
+					K8sGet(gomock.Any(), tt.objKind, tt.objNamespace, tt.objName).
 					Return([]byte(`{"Kind": "test"}`), nil)
 
 			},
@@ -63,7 +63,7 @@ func TestAdminKubernetesObjectsGetAndDelete(t *testing.T) {
 			objNamespace: "openshift-project",
 			mocks: func(tt *test, a *mock_adminactions.MockInterface) {
 				a.EXPECT().
-					K8sList(tt.objKind, tt.objNamespace).
+					K8sList(gomock.Any(), tt.objKind, tt.objNamespace).
 					Return([]byte(`{"Kind": "test"}`), nil)
 
 			},
@@ -102,7 +102,7 @@ func TestAdminKubernetesObjectsGetAndDelete(t *testing.T) {
 			objName:      "config",
 			mocks: func(tt *test, a *mock_adminactions.MockInterface) {
 				a.EXPECT().
-					K8sDelete(tt.objKind, tt.objNamespace, tt.objName).
+					K8sDelete(gomock.Any(), tt.objKind, tt.objNamespace, tt.objName).
 					Return(nil)
 
 			},
@@ -319,8 +319,31 @@ func TestAdminPostKubernetesObjects(t *testing.T) {
 					},
 				},
 			},
-			mocks: func(tt *test, a *mock_adminactions.MockInterface) {
-				a.EXPECT().K8sCreateOrUpdate(tt.objInBody).
+			mocks: func(tt *test, a *mock_adminactions.MockInterface, oc *mock_database.MockOpenShiftClusters, s *mock_database.MockSubscriptions) {
+				clusterDoc := &api.OpenShiftClusterDocument{
+					Key: tt.resourceID,
+					OpenShiftCluster: &api.OpenShiftCluster{
+						ID:   "fakeClusterID",
+						Name: "resourceName",
+						Type: "Microsoft.RedHatOpenShift/openshiftClusters",
+					},
+				}
+				subscriptionDoc := &api.SubscriptionDocument{
+					ID: mockSubID,
+					Subscription: &api.Subscription{
+						State: api.SubscriptionStateRegistered,
+						Properties: &api.SubscriptionProperties{
+							TenantID: mockTenantID,
+						},
+					},
+				}
+				oc.EXPECT().Get(gomock.Any(), strings.ToLower(tt.resourceID)).
+					Return(clusterDoc, nil)
+
+				s.EXPECT().Get(gomock.Any(), mockSubID).
+					Return(subscriptionDoc, nil)
+
+				a.EXPECT().K8sCreateOrUpdate(gomock.Any(), tt.objInBody).
 					Return(nil)
 			},
 			wantStatusCode: http.StatusOK,

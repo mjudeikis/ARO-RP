@@ -64,6 +64,7 @@ require (
 	k8s.io/apimachinery v0.19.0-rc.2
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.18.3
+	sigs.k8s.io/cluster-api-provider-azure v0.0.0
 	sigs.k8s.io/controller-runtime v0.6.2
 	sigs.k8s.io/controller-tools v0.3.0
 )
