@@ -85,14 +85,6 @@ func (e *bestEffortEnricher) enrichOne(ctx context.Context, oc *api.OpenShiftClu
 		return
 	}
 
-	// TODO: Get rid of the wrapping RoundTripper once implementation of the KEP below lands into openshift/client-go:
-	//       https://github.com/kubernetes/enhancements/blob/master/keps/sig-api-machinery/20200123-client-go-ctx.md
-	restConfig.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-		return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			return rt.RoundTrip(req.WithContext(ctx))
-		})
-	})
-
 	tasks := make([]enricherTask, 0, len(e.taskConstructors))
 	for i := range e.taskConstructors {
 		task, err := e.taskConstructors[i](e.log, restConfig, oc)
