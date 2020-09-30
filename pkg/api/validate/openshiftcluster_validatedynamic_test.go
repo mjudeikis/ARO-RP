@@ -419,7 +419,6 @@ func TestValidateVnet(t *testing.T) {
 			err := dv.validateVnet(ctx, vnet)
 			if err != nil && err.Error() != tt.wantErr ||
 				err == nil && tt.wantErr != "" {
-				//spew.Dump(vnet.VirtualNetworkPropertiesFormat.Subnets)
 				t.Error(err)
 			}
 		})
