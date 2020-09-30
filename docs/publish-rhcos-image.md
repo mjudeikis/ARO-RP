@@ -1,6 +1,6 @@
 # Publish RHCOS image
 
-Each release we need to re-publish RHCOS image into azure cloud partners portal.
+Each release we need to re-publish the RHCOS image into the Azure cloud partner portal.
 
 1. Once new installer is vendored run `make vendor` to update local vendor directory.
 
