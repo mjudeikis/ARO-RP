@@ -36,8 +36,6 @@ dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 git.apache.org/thrift.git v0.12.0/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 github.com/AlecAivazis/survey/v2 v2.0.5/go.mod h1:WYBhg6f0y/fNYUuesWQc0PKbJcEliGcYHB9sNT3Bg74=
-github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737 h1:JZHBkt0GhM+ARQykshqpI49yaWCHQbJonH3XpDTwMZQ=
-github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737/go.mod h1:w1KSuh2JgIL3nyRiZijboSUwbbxOrTzWwyWVFUHtXBQ=
 github.com/Azure/azure-pipeline-go v0.2.1/go.mod h1:UGSo8XybXnIGZ3epmeBw7Jdz+HiUVpqIlpz/HKHylF4=
 github.com/Azure/azure-pipeline-go v0.2.2/go.mod h1:4rQ/NZncSvGqNkkOsNpOU1tgoNuIlp9AfUH5G1tvCHc=
 github.com/Azure/azure-sdk-for-go v16.2.1+incompatible/go.mod h1:9XXNKU+eRnpl9moKnB4QOLf1HestfXbmab5FXxiDBjc=
@@ -245,8 +243,6 @@ github.com/aws/aws-sdk-go v1.28.8/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN
 github.com/aws/aws-sdk-go v1.32.3 h1:E3OciOGVlJrv1gQ2T7/Oou+I9nGPB2j978THQjvZBf0=
 github.com/aws/aws-sdk-go v1.32.3/go.mod h1:5zCpMtNQVjRREroY7sYe8lOMRSxkhG6MZveU8YkpAk0=
 github.com/aws/aws-sdk-go-v2 v0.18.0/go.mod h1:JWVYvqSMppoMJC0x5wdwiImzgXTI9FuZwxzkQq9wy+g=
-github.com/axw/gocov v1.0.0 h1:YsqYR66hUmilVr23tu8USgnJIJvnwh3n7j5zRn7x4LU=
-github.com/axw/gocov v1.0.0/go.mod h1:LvQpEYiwwIb2nYkXY2fDWhg9/AsYqkhmrCshjlUJECE=
 github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f/go.mod h1:AuiFmCCPBSrqvVMvuqFuk0qogytodnVFVSN5CeJB8Gc=
 github.com/bazelbuild/bazel-gazelle v0.18.2/go.mod h1:D0ehMSbS+vesFsLGiD6JXu3mVEzOlfUl8wNnq+x/9p0=
 github.com/bazelbuild/bazel-gazelle v0.19.1-0.20191105222053-70208cbdc798/go.mod h1:rPwzNHUqEzngx1iVBfO/2X2npKaT3tqPqqHW6rVsn/A=
@@ -1022,8 +1018,6 @@ github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJS
 github.com/jhump/protoreflect v1.6.0/go.mod h1:eaTn3RZAmMBcV0fifFvlm6VHNz3wSkYyXYWUh7ymB74=
 github.com/jim-minter/go-cosmosdb v0.0.0-20200923160222-1528d2db09d6 h1:4HhzSzhgL1TDsdVqsyifRovCuWwogmz3tL8LQkvqOxQ=
 github.com/jim-minter/go-cosmosdb v0.0.0-20200923160222-1528d2db09d6/go.mod h1:fTvDmpVqcmolOdtE7NltKskFwy8jLRDKHTczX+ZVHTU=
-github.com/jim-minter/installer v0.0.0-20200929075828-5fa7b01d16df h1:KC7Bhon18bSKmZQRaEN7u5bkdlifIhiN5Ksvm7IBrTE=
-github.com/jim-minter/installer v0.0.0-20200929075828-5fa7b01d16df/go.mod h1:kzBny9eOuqsCv0vtQnOt1A/TD/r4A6Qs9dzHPzDNp5k=
 github.com/jim-minter/installer v0.0.0-20200929155541-689d33be21f4 h1:eshUDyo4ongGiMFXNP8sNbyOUB1bB6xclnVvIYrwaUw=
 github.com/jim-minter/installer v0.0.0-20200929155541-689d33be21f4/go.mod h1:kzBny9eOuqsCv0vtQnOt1A/TD/r4A6Qs9dzHPzDNp5k=
 github.com/jimstudt/http-authentication v0.0.0-20140401203705-3eca13d6893a/go.mod h1:wK6yTYYcgjHE1Z1QtXACPDjcFJyBskHEdagmnq3vsP8=
@@ -1356,7 +1350,6 @@ github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200506073438-9d49428ff8
 github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200506073438-9d49428ff837/go.mod h1:aXOt4gMtzXQxymPRm98vJAVmGjDhcTXsrQHauiNJK3o=
 github.com/openshift/cluster-api-provider-azure v0.0.0-20200529030741-17d4edc5142f h1:ogDranQv1AOOyHIKyWyZsXvUoUG5cHNfCPzpV3o1JjQ=
 github.com/openshift/cluster-api-provider-azure v0.0.0-20200529030741-17d4edc5142f/go.mod h1:XTKOAoCAzFtgljQ9HUs4KeTyczeFUoXa0S9+0R2WCmk=
-github.com/openshift/cluster-api-provider-azure v0.1.0-alpha.3 h1:YwsV8i7hNZN9V+PWOm9TBtlfQUfB8GRruRumQMWlDs8=
 github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d h1:6+XwaVvSMPHm3nFdZW3g+iXiOHpf0Y2ajY5/Zr66Dt0=
 github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d/go.mod h1:S+wtA0Rm2FZ5ccC9zNQXUWUDesR6Jsdn5eb6HjAR+Gs=
 github.com/openshift/cluster-api-provider-gcp v0.0.1-0.20200120152131-1b09fd9e7156 h1:FigvMhtTF7jCNkKvSwE3xP583ylW/CFcr0Jr6ZH698o=

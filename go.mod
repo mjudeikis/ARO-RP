@@ -9,7 +9,6 @@ exclude (
 )
 
 require (
-	github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737
 	github.com/Azure/azure-sdk-for-go v46.0.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.11.4
 	github.com/Azure/go-autorest/autorest/adal v0.9.2
@@ -18,11 +17,9 @@ require (
 	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.1-0.20191028180845-3492b2aff503
 	github.com/Azure/go-autorest/tracing v0.6.0
-	github.com/BurntSushi/toml v0.3.1
 	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/alvaroloes/enumer v1.1.2
 	github.com/apparentlymart/go-cidr v1.1.0
-	github.com/axw/gocov v1.0.0
 	github.com/containers/image v3.0.2+incompatible
 	github.com/coreos/go-systemd v0.0.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
@@ -37,12 +34,10 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/jim-minter/go-cosmosdb v0.0.0-20200923160222-1528d2db09d6
 	github.com/jmespath/go-jmespath v0.3.0
-	github.com/jstemmer/go-junit-report v0.9.1
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/client-go v0.0.0-20200729195840-c2b1adc6bed6
-	github.com/openshift/cluster-api v0.0.0-20191129101638-b09907ac6668
 	github.com/openshift/console-operator v0.0.0-20200904235146-182ff9dbe857
 	github.com/openshift/installer v0.0.0-00010101000000-000000000000
 	github.com/openshift/machine-api-operator v0.2.1-0.20200527204437-14e5e0c7d862
@@ -51,7 +46,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/common v0.13.0
 	github.com/satori/go.uuid v1.2.0
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546
+	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/ugorji/go/codec v1.1.7
 	github.com/vbauerster/mpb v3.4.0+incompatible // indirect
