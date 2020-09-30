@@ -22,15 +22,6 @@
             "component": {
                 "type": "go",
                 "go": {
-                    "version": "v0.0.0-20120707110453-75cd24fc2f2c",
-                    "name": "bitbucket.org/ww/goautoneg"
-                }
-            }
-        },
-        {
-            "component": {
-                "type": "go",
-                "go": {
                     "version": "v1.0.1",
                     "name": "bou.ke/monkey"
                 }

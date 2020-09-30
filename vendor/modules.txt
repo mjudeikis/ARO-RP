@@ -1,3 +1,5 @@
+# bitbucket.org/ww/goautoneg v0.0.0-20120707110453-75cd24fc2f2c => github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d
+bitbucket.org/ww/goautoneg
 # cloud.google.com/go v0.49.0
 cloud.google.com/go/compute/metadata
 # github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737

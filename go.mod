@@ -9,6 +9,7 @@ exclude (
 )
 
 require (
+	bitbucket.org/ww/goautoneg v0.0.0-20120707110453-75cd24fc2f2c
 	github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737
 	github.com/Azure/azure-sdk-for-go v46.0.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.11.4
@@ -68,6 +69,7 @@ require (
 )
 
 replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d // bitbucket is broken. Always
 	github.com/coreos/go-systemd => github.com/coreos/go-systemd/v22 v22.0.0 // Pin non-versioned import to v22.0.0
 	github.com/etcd-io/bbolt => go.etcd.io/bbolt v1.3.5 // indirect from containers/images
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.0

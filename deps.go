@@ -7,6 +7,7 @@ package main
 // Licensed under the Apache License 2.0.
 
 import (
+	_ "bitbucket.org/ww/goautoneg"                        //intermediate dep. Investiage
 	_ "github.com/AlekSi/gocov-xml"                       // used in test result publishing
 	_ "github.com/alvaroloes/enumer"                      // used in enum type generation
 	_ "github.com/axw/gocov/gocov"                        // used in test result publishing
