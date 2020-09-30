@@ -3,9 +3,10 @@ COMMIT = $(shell git rev-parse --short HEAD)$(shell [[ $$(git status --porcelain
 ARO_IMAGE ?= ${RP_IMAGE_ACR}.azurecr.io/aro:$(COMMIT)
 
 export CGO_CFLAGS=-Dgpgme_off_t=off_t
+export GOFLAGS=-mod=vendor
 
 aro: generate
-	go build -mod=vendor -ldflags "-X github.com/Azure/ARO-RP/pkg/util/version.GitCommit=$(COMMIT)" ./cmd/aro
+	go build -ldflags "-X github.com/Azure/ARO-RP/pkg/util/version.GitCommit=$(COMMIT)" ./cmd/aro
 
 az: pyenv
 	. pyenv/bin/activate && \
@@ -58,7 +59,7 @@ publish-image-routefix: image-routefix
 	docker push ${RP_IMAGE_ACR}.azurecr.io/routefix:$(COMMIT)
 
 proxy:
-	go build -mod=vendor -ldflags "-X github.com/Azure/ARO-RP/pkg/util/version.GitCommit=$(COMMIT)" ./hack/proxy
+	go build -ldflags "-X github.com/Azure/ARO-RP/pkg/util/version.GitCommit=$(COMMIT)" ./hack/proxy
 
 pyenv:
 	virtualenv pyenv
@@ -87,7 +88,7 @@ test-e2e: e2e.test
 	./e2e.test -test.timeout 60m -test.v -ginkgo.v
 
 test-go: generate
-	go build -mod=vendor ./...
+	go build ./...
 
 	gofmt -s -w cmd hack pkg test
 	go run ./vendor/golang.org/x/tools/cmd/goimports -w -local=github.com/Azure/ARO-RP cmd hack pkg test
