@@ -100,7 +100,7 @@ func networkPrivateLinkService(infraID, subscriptionID string, oc *api.OpenShift
 			PrivateLinkServiceProperties: &mgmtnetwork.PrivateLinkServiceProperties{
 				LoadBalancerFrontendIPConfigurations: &[]mgmtnetwork.FrontendIPConfiguration{
 					{
-						ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-v4')]", infraID)),
+						ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-lb-ip-v4')]", infraID)),
 					},
 				},
 				IPConfigurations: &[]mgmtnetwork.PrivateLinkServiceIPConfiguration{
@@ -184,22 +184,22 @@ func networkInternalLoadBalancer(infraID string, oc *api.OpenShiftCluster, insta
 								ID: to.StringPtr(oc.Properties.MasterProfile.SubnetID),
 							},
 						},
-						Name: to.StringPtr("internal-v4"),
+						Name: to.StringPtr("internal-lb-ip-v4"),
 					},
 				},
 				BackendAddressPools: &[]mgmtnetwork.BackendAddressPool{
 					{
-						Name: to.StringPtr(infraID + "-internal-controlplane-v4"),
+						Name: to.StringPtr(infraID),
 					},
 				},
 				LoadBalancingRules: &[]mgmtnetwork.LoadBalancingRule{
 					{
 						LoadBalancingRulePropertiesFormat: &mgmtnetwork.LoadBalancingRulePropertiesFormat{
 							FrontendIPConfiguration: &mgmtnetwork.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-v4')]", infraID)),
+								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-lb-ip-v4')]", infraID)),
 							},
 							BackendAddressPool: &mgmtnetwork.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s-internal-controlplane-v4')]", infraID)),
+								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s')]", infraID)),
 							},
 							Probe: &mgmtnetwork.SubResource{
 								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/probes', '%s-internal', 'api-internal-probe')]", infraID)),
@@ -216,10 +216,10 @@ func networkInternalLoadBalancer(infraID string, oc *api.OpenShiftCluster, insta
 					{
 						LoadBalancingRulePropertiesFormat: &mgmtnetwork.LoadBalancingRulePropertiesFormat{
 							FrontendIPConfiguration: &mgmtnetwork.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-v4')]", infraID)),
+								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', '%s-internal', 'internal-lb-ip-v4')]", infraID)),
 							},
 							BackendAddressPool: &mgmtnetwork.SubResource{
-								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s-internal-controlplane-v4')]", infraID)),
+								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s')]", infraID)),
 							},
 							Probe: &mgmtnetwork.SubResource{
 								ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/probes', '%s-internal', 'sint-probe')]", infraID)),
@@ -367,7 +367,7 @@ func networkBootstrapNIC(infraID string, oc *api.OpenShiftCluster, installConfig
 									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s', '%[1]s')]", infraID)),
 								},
 								{
-									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s-internal-controlplane-v4')]", infraID)),
+									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s')]", infraID)),
 								},
 							},
 							Subnet: &mgmtnetwork.Subnet{
@@ -402,7 +402,7 @@ func networkMasterNICs(infraID string, oc *api.OpenShiftCluster, installConfig *
 									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s', '%[1]s')]", infraID)),
 								},
 								{
-									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s-internal-controlplane-v4')]", infraID)),
+									ID: to.StringPtr(fmt.Sprintf("[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', '%s-internal', '%[1]s')]", infraID)),
 								},
 							},
 							Subnet: &mgmtnetwork.Subnet{
