@@ -58,5 +58,5 @@ func (m *manager) logIngressControllers(ctx context.Context) (interface{}, error
 		return nil, nil
 	}
 
-	return m.operatorcli.OperatorV1().IngressControllers("openshift-ingress-operator").List(metav1.ListOptions{})
+	return m.operatorcli.OperatorV1().IngressControllers("openshift-ingress-operator").List(ctx, metav1.ListOptions{})
 }

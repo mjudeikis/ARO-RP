@@ -6934,15 +6934,6 @@
             "component": {
                 "type": "go",
                 "go": {
-                    "version": "v0.1.0-alpha.3",
-                    "name": "github.com/openshift/cluster-api-provider-azure"
-                }
-            }
-        },
-        {
-            "component": {
-                "type": "go",
-                "go": {
                     "version": "v0.0.0-20190821174549-a2a477909c1d",
                     "name": "github.com/openshift/cluster-api-provider-baremetal"
                 }
