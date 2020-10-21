@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -319,30 +320,7 @@ func TestAdminPostKubernetesObjects(t *testing.T) {
 					},
 				},
 			},
-			mocks: func(tt *test, a *mock_adminactions.MockInterface, oc *mock_database.MockOpenShiftClusters, s *mock_database.MockSubscriptions) {
-				clusterDoc := &api.OpenShiftClusterDocument{
-					Key: tt.resourceID,
-					OpenShiftCluster: &api.OpenShiftCluster{
-						ID:   "fakeClusterID",
-						Name: "resourceName",
-						Type: "Microsoft.RedHatOpenShift/openshiftClusters",
-					},
-				}
-				subscriptionDoc := &api.SubscriptionDocument{
-					ID: mockSubID,
-					Subscription: &api.Subscription{
-						State: api.SubscriptionStateRegistered,
-						Properties: &api.SubscriptionProperties{
-							TenantID: mockTenantID,
-						},
-					},
-				}
-				oc.EXPECT().Get(gomock.Any(), strings.ToLower(tt.resourceID)).
-					Return(clusterDoc, nil)
-
-				s.EXPECT().Get(gomock.Any(), mockSubID).
-					Return(subscriptionDoc, nil)
-
+			mocks: func(tt *test, a *mock_adminactions.MockInterface) {
 				a.EXPECT().K8sCreateOrUpdate(gomock.Any(), tt.objInBody).
 					Return(nil)
 			},
