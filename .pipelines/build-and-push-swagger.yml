@@ -12,7 +12,7 @@ jobs:
     name: ARO-CI
 
   steps:
-  - task: PublishAzureRedHatOpenShiftSwagger
+  - task: PublishAzureRedHatOpenShiftSwagger@0
     inputs:
       serviceName: 'Azure Red Hat OpenShift'
       publishSource: 'Git'
