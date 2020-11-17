@@ -16,5 +16,5 @@ jobs:
   - script: |
       git remote add mirror https://$(mirror-location) >/dev/null
       git branch --track origin/master master >/dev/null
-      git push https://$(vsts-token)@$(mirror-location)
+      git push https://$(vsts-token)@$(mirror-location) master:master
     displayName: Mirror ARO-RP
