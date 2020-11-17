@@ -28,6 +28,7 @@ require (
 	github.com/containers/libtrust v0.0.0-20200511145503-9c3a6c22cd9a // indirect
 	github.com/containers/storage v1.23.9 // indirect
 	github.com/coreos/go-systemd/v22 v22.1.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/go-restful v2.14.3+incompatible // indirect
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
