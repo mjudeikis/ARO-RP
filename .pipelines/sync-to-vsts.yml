@@ -14,6 +14,6 @@ jobs:
   steps:
   - template: ./templates/template-checkout.yml
   - script: |
-      git fetch origin --all
+      git fetch origin
       git push https://$(vsts-token)@$(mirror-location) master:master
     displayName: Mirror ARO-RP
