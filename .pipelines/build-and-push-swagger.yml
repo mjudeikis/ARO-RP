@@ -12,9 +12,9 @@ jobs:
     name: ARO-CI
 
   steps:
-  - task: PublishOpenApiDocument@1
+  - task: PublishOpenApiDocument@0
     inputs:
-      serviceName: 'Azure Red Hat OpenShift'
+      serviceName: 'ARO'
       publishSource: 'Git'
       sourceGitAccount: 'msazure'
       sourceGitProjectName: 'AzureRedHatOpenShift'
@@ -22,5 +22,4 @@ jobs:
       sourceGitPath: '/swagger/redhatopenshift/resource-manager/Microsoft.RedHatOpenShift/stable/2020-04-30/redhatopenshift.json'
       sourceGitEncoding: 'utf8'
       useSystemAccessToken: true
-      serviceCatalogId: $(service-catalog-id)
       microsoftSwaggerEnvironment: 'Production'
