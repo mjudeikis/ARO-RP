@@ -15,8 +15,6 @@ jobs:
   - template: ./templates/template-checkout.yml
   - script: |
       git remote add mirror https://$(mirror-location) >/dev/null
-      git checkout master
-      git pull
       git branch --track origin/master master >/dev/null
-      git push https://$(vsts-token)@$(mirror-location) -u --all
+      git push https://$(vsts-token)@$(mirror-location)
     displayName: Mirror ARO-RP
