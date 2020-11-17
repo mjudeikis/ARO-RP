@@ -13,14 +13,14 @@ jobs:
 
   steps:
   - task: PublishOpenApiDocument@0
-  inputs:
-    serviceName: 'Azure Red Hat OpenShift'
-    publishSource: 'Git'
-    sourceGitAccount: 'msazure'
-    sourceGitProjectName: 'AzureRedHatOpenShift'
-    sourceGitRepositoryName: 'ARO-RP-Mirror'
-    sourceGitPath: '/swagger/redhatopenshift/resource-manager/Microsoft.RedHatOpenShift/stable/2020-04-30/redhatopenshift.json'
-    sourceGitEncoding: 'utf8'
-    useSystemAccessToken: true
-    serviceCatalogId: $(service-catalog-id)
-    microsoftSwaggerEnvironment: 'Production'
+    inputs:
+      serviceName: 'Azure Red Hat OpenShift'
+      publishSource: 'Git'
+      sourceGitAccount: 'msazure'
+      sourceGitProjectName: 'AzureRedHatOpenShift'
+      sourceGitRepositoryName: 'ARO-RP-Mirror'
+      sourceGitPath: '/swagger/redhatopenshift/resource-manager/Microsoft.RedHatOpenShift/stable/2020-04-30/redhatopenshift.json'
+      sourceGitEncoding: 'utf8'
+      useSystemAccessToken: true
+      serviceCatalogId: $(service-catalog-id)
+      microsoftSwaggerEnvironment: 'Production'
