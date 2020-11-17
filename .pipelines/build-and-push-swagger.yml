@@ -12,11 +12,15 @@ jobs:
     name: ARO-CI
 
   steps:
-  - template: ./templates/template-checkout.yml
-  - script: |
-      make generate
-      cp -a --parents swagger/* "$(Build.ArtifactStagingDirectory)"
-    displayName: Copy artifacts
-  - task: PublishBuildArtifacts@1
-    displayName: Publish Artifacts
-    name: aro_swagger
+  - task: PublishOpenApiDocument@0
+  inputs:
+    serviceName: 'Azure Red Hat OpenShift'
+    publishSource: 'Git'
+    sourceGitAccount: 'msazure'
+    sourceGitProjectName: 'AzureRedHatOpenShift'
+    sourceGitRepositoryName: 'ARO-RP-Mirror'
+    sourceGitPath: '/swagger/redhatopenshift/resource-manager/Microsoft.RedHatOpenShift/stable/2020-04-30/redhatopenshift.json'
+    sourceGitEncoding: 'utf8'
+    useSystemAccessToken: true
+    serviceCatalogId: $(service-catalog-id)
+    microsoftSwaggerEnvironment: 'Production'
