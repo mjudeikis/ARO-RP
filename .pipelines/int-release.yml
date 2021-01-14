@@ -10,12 +10,18 @@ parameters:
   type: boolean
   default: true
 
+resources:
+  repositories:
+    - repository: RPConfig
+      type: git
+      name: AzureRedHatOpenShift/RP-Config
+
 stages:
 - stage: Deploy_INT
   dependsOn: []
   displayName: 🚀 Deploy INT
   jobs:
-  - template: ./templates/template-job-deploy-azure-env.yml
+  - template: ./templates/template-job-deploy-azure-env.yml@RPConfig
     parameters:
       environment: RP-INT
       rpMode: int
