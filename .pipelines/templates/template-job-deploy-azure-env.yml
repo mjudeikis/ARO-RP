@@ -13,6 +13,13 @@ parameters:
   rpConfigCommit: ''
   rpMode: ''
 
+resources:
+  repositories:
+    - repository: RPConfig
+      type: git
+      name: AzureRedHatOpenShift/RP-Config
+      ref: ${{ parameters.rpConfigCommit }}
+
 jobs:
 - ${{ each location in parameters.locations }}:
   - deployment: Deploy_${{ location }}
@@ -23,8 +30,7 @@ jobs:
       runOnce:
         deploy:
           steps:
-          - checkout: |
-              git://AzureRedHatOpenShift/RP-Config@${{ parameters.rpConfigCommit }}
+          - checkout: RPConfig
           - script: |
               set -e
 
