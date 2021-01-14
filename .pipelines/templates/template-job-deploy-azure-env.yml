@@ -24,7 +24,7 @@ jobs:
         deploy:
           steps:
           - checkout: |
-              git://AzureRedHatOpenShift/RP\-Config@${{ parameters.rpConfigCommit }}
+              git://AzureRedHatOpenShift/RP-Config@${{ parameters.rpConfigCommit }}
           - script: |
               set -e
 
