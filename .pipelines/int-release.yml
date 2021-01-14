@@ -21,7 +21,8 @@ stages:
   dependsOn: []
   displayName: 🚀 Deploy INT
   jobs:
-  - template: ./templates/template-job-deploy-azure-env.yml@RPConfig
+  - checkout: RPConfig
+  - template: ./templates/template-job-deploy-azure-env.yml
     parameters:
       environment: RP-INT
       rpMode: int
