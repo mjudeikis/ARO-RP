@@ -8,7 +8,7 @@ from azure.cli.core.commands.client_factory import get_mgmt_service_client
 from azure.cli.core.commands.client_factory import get_subscription_id
 from azure.cli.core.profiles import ResourceType
 from azure.cli.core.util import sdk_no_wait
-from azure.cli.core.azclierror import ResourceNotFoundError, UnauthorizedError
+from azure.cli.core.azclierror import ResourceNotFoundError, UnauthorizedError, InvalidArgumentValueError
 from azure.graphrbac.models import GraphErrorException
 from msrestazure.azure_exceptions import CloudError
 from msrestazure.tools import resource_id, parse_resource_id
@@ -211,20 +211,48 @@ def aro_list_credentials(client, resource_group_name, resource_name):
     return client.list_credentials(resource_group_name, resource_name)
 
 
-def aro_update(cmd, client, resource_group_name, resource_name, no_wait=False):
+def aro_update(cmd,
+               client,
+               resource_group_name,
+               resource_name,
+               client_id=None,
+               client_secret=None,
+               no_wait=False):
+
+    # most of the update flow will require cluster api representation
+    oc = client.get(resource_group_name, resource_name)
+
+    # ServicePrincipalProfile update flow
+    client_id, client_secret = service_principal_update(cmd.cli_ctx, oc, client_id, client_secret)
+
+    # construct update payload
+    oc = openshiftcluster.OpenShiftClusterUpdate(
+        service_principal_profile=openshiftcluster.ServicePrincipalProfile(),
+    )
+
+    if not client_secret:
+        oc.service_principal_profile.client_secret = client_secret
+
+    if not client_id:
+        oc.service_principal_profile.client_id = client_id
+
+    return sdk_no_wait(no_wait, client.update,
+                       resource_group_name=resource_group_name,
+                       resource_name=resource_name,
+                       parameters=oc)
+
+def service_principal_update(cli_ctx, oc, client_id=None, client_secret=None):
     rp_client_sp = None
     client_sp = None
     resources = set()
 
     try:
-        oc = client.get(resource_group_name, resource_name)
-
         # Get cluster resources we need to assign network contributor on
-        resources = get_cluster_network_resources(cmd.cli_ctx, oc)
+        resources = get_cluster_network_resources(cli_ctx, oc)
     except (CloudError, HttpOperationError) as e:
         logger.info(e.message)
 
-    aad = AADManager(cmd.cli_ctx)
+    aad = AADManager(cli_ctx)
 
     if rp_mode_production():
         rp_client_id = FP_CLIENT_ID
@@ -269,20 +297,16 @@ def aro_update(cmd, client, resource_group_name, resource_name, no_wait=False):
             resource_contributor_exists = True
 
             try:
-                resource_contributor_exists = has_network_contributor_on_resource(cmd.cli_ctx, resource, sp_id)
+                resource_contributor_exists = has_network_contributor_on_resource(cli_ctx, resource, sp_id)
             except CloudError as e:
                 logger.info(e.message)
                 continue
 
             if not resource_contributor_exists:
-                assign_network_contributor_to_resource(cmd.cli_ctx, resource, sp_id)
+                assign_network_contributor_to_resource(cli_ctx, resource, sp_id)
 
-    oc = openshiftcluster.OpenShiftClusterUpdate()
+    return client_id, client_secret
 
-    return sdk_no_wait(no_wait, client.update,
-                       resource_group_name=resource_group_name,
-                       resource_name=resource_name,
-                       parameters=oc)
 
 
 def rp_mode_development():
