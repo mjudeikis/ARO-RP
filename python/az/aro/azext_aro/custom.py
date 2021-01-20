@@ -241,6 +241,14 @@ def aro_update(cmd, client, resource_group_name, resource_name, no_wait=False):
 
     client_id = oc.service_principal_profile.client_id
 
+    # Best effort - assume the application exists if exception is raised
+    try:
+        application = aad.get_application_by_client_id(client_id)
+        if not application:
+            raise ResourceNotFoundError("Cluster application not found.")
+    except GraphErrorException as e:
+        logger.info(e.message)
+
     # Best effort - assume the role assignments on the SP exist if exception raised
     try:
         client_sp = aad.get_service_principal(client_id)
