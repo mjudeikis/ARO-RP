@@ -241,23 +241,45 @@ def aro_update(cmd,
                        resource_name=resource_name,
                        parameters=oc)
 
+
+# service_principal_update manages Cluster SP update
+# 1. If called without parameters it should be best-effort
+# 2. If called with parameters it fails if something is not possible
+# 2.1. If client_id is provided, we expect expect secret to be provided too
+#      If only secret is provided - we are updating secret
+#      In any case we will try to verify and update rbac
+# 2.2. TODO: refresh-cluster-service-principal is provided
 def service_principal_update(cli_ctx, oc, client_id=None, client_secret=None):
     rp_client_sp = None
     client_sp = None
     resources = set()
+
+    # if any of these are set - we expect users to have access to fix rbac so we fail
+    fail = client_id is not None or client_secret is not None
+
+    # update client_id without providing secret is not valid
+    if client_id is not None:
+        if client_id != oc.service_principal_profile.client_id and client_secret == None:
+            raise InvalidArgumentValueError("Must specify --client-id with --client-secret.")
+
+    # if only secret is provided, we assume we re-use existing principal.
+    # it is users responsibility to vet it.
+    if client_id is None:
+        client_id = oc.service_principal_profile.client_id
+
+    if rp_mode_production():
+        rp_client_id = FP_CLIENT_ID
+    else:
+        rp_client_id = os.environ.get('AZURE_FP_CLIENT_ID', FP_CLIENT_ID)
 
     try:
         # Get cluster resources we need to assign network contributor on
         resources = get_cluster_network_resources(cli_ctx, oc)
     except (CloudError, HttpOperationError) as e:
         logger.info(e.message)
+        if fail: raise CloudError(e)
 
     aad = AADManager(cli_ctx)
-
-    if rp_mode_production():
-        rp_client_id = FP_CLIENT_ID
-    else:
-        rp_client_id = os.environ.get('AZURE_FP_CLIENT_ID', FP_CLIENT_ID)
 
     # Best effort - assume the role assignments on the SP exist if exception raised
     try:
@@ -266,8 +288,7 @@ def service_principal_update(cli_ctx, oc, client_id=None, client_secret=None):
             raise ResourceNotFoundError("RP service principal not found.")
     except GraphErrorException as e:
         logger.info(e.message)
-
-    client_id = oc.service_principal_profile.client_id
+        if fail: raise GraphErrorException(e)
 
     # Best effort - assume the application exists if exception is raised
     try:
@@ -276,6 +297,7 @@ def service_principal_update(cli_ctx, oc, client_id=None, client_secret=None):
             raise ResourceNotFoundError("Cluster application not found.")
     except GraphErrorException as e:
         logger.info(e.message)
+        if fail: raise GraphErrorException(e)
 
     # Best effort - assume the role assignments on the SP exist if exception raised
     try:
@@ -284,6 +306,7 @@ def service_principal_update(cli_ctx, oc, client_id=None, client_secret=None):
             raise ResourceNotFoundError("Cluster service principal not found.")
     except GraphErrorException as e:
         logger.info(e.message)
+        if fail: raise GraphErrorException(e)
 
     # Drop any None service principal objects
     sp_obj_ids = [sp.object_id for sp in [rp_client_sp, client_sp] if sp]
