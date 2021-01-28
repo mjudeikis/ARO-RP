@@ -49,15 +49,27 @@ func (c conditionStep) run(ctx context.Context, log *logrus.Entry) error {
 		pollInterval = c.pollInterval
 	}
 
+	var stepErr error
+
 	// Run the condition function immediately, and then every
 	// runner.pollInterval, until the condition returns true or timeoutCtx's
 	// timeout fires. Errors from `f` are returned directly.
-	return wait.PollImmediateUntil(pollInterval, func() (bool, error) {
+	err := wait.PollImmediateUntil(pollInterval, func() (bool, error) {
 		// We use the outer context, not the timeout context, as we do not want
 		// to time out the condition function itself, only stop retrying once
 		// timeoutCtx's timeout has fired.
-		return c.f(ctx)
+		result, err := c.f(ctx)
+		if err != wait.ErrWaitTimeout {
+			stepErr = err
+		}
+		return result, err
+
 	}, timeoutCtx.Done())
+
+	if err == wait.ErrWaitTimeout {
+		return stepErr
+	}
+	return err
 }
 
 func (c conditionStep) String() string {
