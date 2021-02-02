@@ -26,14 +26,16 @@ import (
 	"github.com/Azure/ARO-RP/pkg/util/subnet"
 )
 
-// SlimDynamic validate in the operator context.
-type SlimDynamic interface {
+// DynamicValidator validates in the operator context.
+type DynamicValidator interface {
 	ValidateVnetPermissions(ctx context.Context, code string, typ string) error
 	ValidateRouteTablesPermissions(ctx context.Context, code string, typ string) error
 	ValidateVnetDNS(ctx context.Context) error
 	// etc
 	// does Quota code go in here too?
 }
+
+var _ DynamicValidator = &dynamic{}
 
 type dynamic struct {
 	log             *logrus.Entry

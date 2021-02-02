@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/ARO-RP/pkg/api"
 	"github.com/Azure/ARO-RP/pkg/env"
 	"github.com/Azure/ARO-RP/pkg/util/aad"
+	"github.com/Azure/ARO-RP/pkg/util/azureclaim"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/features"
 	"github.com/Azure/ARO-RP/pkg/util/refreshable"
 	"github.com/Azure/ARO-RP/pkg/util/subnet"
@@ -40,14 +41,6 @@ func NewOpenShiftClusterDynamicValidator(log *logrus.Entry, env env.Core, oc *ap
 		fpAuthorizer:    fpAuthorizer,
 		providers:       features.NewProvidersClient(env.Environment(), subscriptionDoc.ID, fpAuthorizer),
 	}
-}
-
-type azureClaim struct {
-	Roles []string `json:"roles,omitempty"`
-}
-
-func (*azureClaim) Valid() error {
-	return fmt.Errorf("unimplemented")
 }
 
 type openShiftClusterDynamicValidator struct {
@@ -92,7 +85,7 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 		return err
 	}
 
-	token, err := aad.GetToken(ctx, dv.log, dv.oc, dv.subscriptionDoc, dv.env.Environment().ActiveDirectoryEndpoint, dv.env.Environment().ResourceManagerEndpoint)
+	token, err := aad.GetToken(ctx, dv.log, dv.oc.Properties.ServicePrincipalProfile.ClientID, dv.oc.Properties.ServicePrincipalProfile.ClientSecret, dv.subscriptionDoc.Subscription.Properties.TenantID, dv.env.Environment().ActiveDirectoryEndpoint, dv.env.Environment().ResourceManagerEndpoint)
 	if err != nil {
 		return err
 	}
@@ -300,13 +293,14 @@ func validateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env
 
 	log.Print("validateServicePrincipalProfile")
 
-	token, err := aad.GetToken(ctx, log, oc, sub, env.Environment().ActiveDirectoryEndpoint, env.Environment().GraphEndpoint)
+	token, err := aad.GetToken(ctx, log, oc.Properties.ServicePrincipalProfile.ClientID, oc.Properties.ServicePrincipalProfile.ClientSecret, sub.Subscription.Properties.TenantID, env.Environment().ActiveDirectoryEndpoint, env.Environment().GraphEndpoint)
+
 	if err != nil {
 		return err
 	}
 
 	p := &jwt.Parser{}
-	c := &azureClaim{}
+	c := &azureclaim.AzureClaim{}
 	_, _, err = p.ParseUnverified(token.OAuthToken(), c)
 	if err != nil {
 		return err
