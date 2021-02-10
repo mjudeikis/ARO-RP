@@ -61,7 +61,7 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return err
 	}
 
-	token, err := aad.GetToken(ctx, r.log, string(azCred.clientID), api.SecureString(azCred.clientSecret), string(azCred.tenantID), azEnv.ActiveDirectoryEndpoint, azEnv.ResourceManagerEndpoint)
+	token, err := aad.GetToken(ctx, r.log, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID, azEnv.ActiveDirectoryEndpoint, azEnv.ResourceManagerEndpoint)
 	if err != nil {
 		return err
 	}

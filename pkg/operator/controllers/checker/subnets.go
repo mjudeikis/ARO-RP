@@ -59,5 +59,5 @@ func getSubnetIDs(ctx context.Context, vnetID string, clustercli maoclient.Inter
 		workerSubnetIDs = append(workerSubnetIDs, vnetID+"/subnets/"+k)
 	}
 
-	return masterSubnetID, workerSubnetIDs, err
+	return "", []string{}, err
 }

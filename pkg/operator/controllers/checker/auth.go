@@ -5,7 +5,6 @@ package checker
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -19,9 +18,9 @@ import (
 )
 
 type credentials struct {
-	clientID     []byte
-	clientSecret []byte
-	tenantID     []byte
+	clientID     string
+	clientSecret string
+	tenantID     string
 }
 
 func newAuthorizer(token *adal.ServicePrincipalToken) (refreshable.Authorizer, error) {
@@ -43,24 +42,15 @@ func newAuthorizer(token *adal.ServicePrincipalToken) (refreshable.Authorizer, e
 
 func azCredentials(ctx context.Context, kubernetescli kubernetes.Interface) (*credentials, error) {
 	var creds credentials
-	var ok bool
 
 	mysec, err := kubernetescli.CoreV1().Secrets(azureCredentialSecretNamespace).Get(ctx, azureCredentialSecretName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	if creds.clientID, ok = mysec.Data["azure_client_id"]; !ok {
-		return nil, errors.New("azure_client_id does not exist")
-	}
-
-	if creds.clientSecret, ok = mysec.Data["azure_client_secret"]; !ok {
-		return nil, errors.New("azure_client_secret does not exist")
-	}
-
-	if creds.tenantID, ok = mysec.Data["azure_tenant_id"]; !ok {
-		return nil, errors.New("azure_tenant_id does not exist")
-	}
+	creds.clientID = string(mysec.Data["azure_client_id"])
+	creds.clientSecret = string(mysec.Data["azure_client_secret"])
+	creds.tenantID = string(mysec.Data["azure_tenant_id"])
 
 	return &creds, nil
 }
