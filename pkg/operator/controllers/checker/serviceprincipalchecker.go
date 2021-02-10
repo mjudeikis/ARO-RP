@@ -81,7 +81,14 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return err
 	}
 
-	return validator.ValidateVnetPermissions(ctx, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
+	err = validator.ValidateVnetPermissions(ctx)
+	if err != nil {
+		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
+			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
+		}
+	}
+
+	return err
 }
 
 func (r *ServicePrincipalChecker) Name() string {
@@ -98,6 +105,8 @@ func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
 
 	err := r.servicePrincipalValid(ctx)
 	if err != nil {
+		//TODO - bvesel - check detailed error before setting message
+		//TODO - bvesel: how should we form at error messages
 		cond.Status = corev1.ConditionFalse
 		cond.Message = err.Error()
 	}

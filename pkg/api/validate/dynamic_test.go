@@ -18,7 +18,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Azure/ARO-RP/pkg/api"
 	mock_authorization "github.com/Azure/ARO-RP/pkg/util/mocks/azureclient/mgmt/authorization"
 	mock_network "github.com/Azure/ARO-RP/pkg/util/mocks/azureclient/mgmt/network"
 )
@@ -79,7 +78,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: "400: InvalidResourceProviderPermissions: : The resource provider does not have Network Contributor permission on vnet '" + vnetID + "'.",
+			wantErr: "400: : : The subject does not have Network Contributor permission on vnet '" + vnetID + "'.",
 		},
 		{
 			name: "fail: not found",
@@ -118,7 +117,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 				},
 			}
 
-			err := dv.ValidateVnetPermissions(ctx, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
+			err := dv.ValidateVnetPermissions(ctx)
 			if err != nil && err.Error() != tt.wantErr ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)
@@ -314,7 +313,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 						},
 					}, nil)
 			},
-			wantErr: "400: InvalidResourceProviderPermissions: : The resource provider does not have Network Contributor permission on route table '" + routeTableID + "'.",
+			wantErr: "400: : : The subject does not have Network Contributor permission on route table '" + routeTableID + "'.",
 		},
 		{
 			name: "fail: not found",
@@ -349,7 +348,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 		}
 
 		// purposefully hardcoding path to "" so it is not needed in the wantErr message
-		err := dv.validateRouteTablePermissions(ctx, tt.rtID, "", api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
+		err := dv.validateRouteTablePermissions(ctx, tt.rtID, "")
 		if err != nil && err.Error() != tt.wantErr ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
@@ -431,7 +430,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: "400: InvalidResourceProviderPermissions: : The resource provider does not have Network Contributor permission on route table '" + strings.ToLower(masterRtID) + "'.",
+			wantErr: "400: : : The subject does not have Network Contributor permission on route table '" + strings.ToLower(masterRtID) + "'.",
 		},
 		{
 			name: "pass",
@@ -513,7 +512,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 				tt.vnetMocks(vnetClient, *vnet)
 			}
 
-			err := dv.ValidateRouteTablesPermissions(ctx, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
+			err := dv.ValidateRouteTablesPermissions(ctx)
 			if err != nil && err.Error() != tt.wantErr ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)

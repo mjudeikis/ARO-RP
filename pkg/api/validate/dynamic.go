@@ -28,8 +28,8 @@ import (
 
 // DynamicValidator validates in the operator context.
 type DynamicValidator interface {
-	ValidateVnetPermissions(ctx context.Context, code string, typ string) error
-	ValidateRouteTablesPermissions(ctx context.Context, code string, typ string) error
+	ValidateVnetPermissions(ctx context.Context) error
+	ValidateRouteTablesPermissions(ctx context.Context) error
 	ValidateVnetDNS(ctx context.Context) error
 	// etc
 	// does Quota code go in here too?
@@ -69,8 +69,8 @@ func NewValidator(log *logrus.Entry, azEnv *azure.Environment, masterSubnetID st
 	}, nil
 }
 
-func (dv *dynamic) ValidateVnetPermissions(ctx context.Context, code string, typ string) error {
-	dv.log.Printf("ValidateVnetPermissions (%s)", typ)
+func (dv *dynamic) ValidateVnetPermissions(ctx context.Context) error {
+	dv.log.Printf("ValidateVnetPermissions")
 
 	err := dv.validateActions(ctx, dv.vnetr, []string{
 		"Microsoft.Network/virtualNetworks/join/action",
@@ -82,7 +82,7 @@ func (dv *dynamic) ValidateVnetPermissions(ctx context.Context, code string, typ
 	})
 
 	if err == wait.ErrWaitTimeout {
-		return api.NewCloudError(http.StatusBadRequest, code, "", "The %s does not have Network Contributor permission on vnet '%s'.", typ, dv.vnetr)
+		return api.NewCloudError(http.StatusBadRequest, "", "", "The subject does not have Network Contributor permission on vnet '%s'.", dv.vnetr)
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
@@ -91,7 +91,7 @@ func (dv *dynamic) ValidateVnetPermissions(ctx context.Context, code string, typ
 	return err
 }
 
-func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context, code string, typ string) error {
+func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 	vnet, err := dv.virtualNetworks.Get(ctx, dv.vnetr.ResourceGroup, dv.vnetr.ResourceName, "")
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context, code stri
 	sort.Slice(rts, func(i, j int) bool { return strings.Compare(m[rts[i]], m[rts[j]]) < 0 })
 
 	for _, rt := range rts {
-		err := dv.validateRouteTablePermissions(ctx, rt, m[rt], code, typ)
+		err := dv.validateRouteTablePermissions(ctx, rt, m[rt])
 		if err != nil {
 			return err
 		}
@@ -139,8 +139,8 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context, code stri
 	return nil
 }
 
-func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID string, path string, code string, typ string) error {
-	dv.log.Printf("validateRouteTablePermissions(%s, %s)", typ, path)
+func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID string, path string) error {
+	dv.log.Printf("validateRouteTablePermissions(%s)", path)
 
 	rtr, err := azure.ParseResourceID(rtID)
 	if err != nil {
@@ -153,7 +153,7 @@ func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID strin
 		"Microsoft.Network/routeTables/write",
 	})
 	if err == wait.ErrWaitTimeout {
-		return api.NewCloudError(http.StatusBadRequest, code, "", "The %s does not have Network Contributor permission on route table '%s'.", typ, rtID)
+		return api.NewCloudError(http.StatusBadRequest, "", "", "The subject does not have Network Contributor permission on route table '%s'.", rtID)
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
@@ -163,7 +163,7 @@ func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID strin
 }
 
 func (dv *dynamic) ValidateVnetDNS(ctx context.Context) error {
-	dv.log.Print("validateVnetDns")
+	dv.log.Print("validateVnetDNS")
 
 	vnet, err := dv.virtualNetworks.Get(ctx, dv.vnetr.ResourceGroup, dv.vnetr.ResourceName, "")
 	if err != nil {

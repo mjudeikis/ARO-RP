@@ -69,13 +69,19 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 		return err
 	}
 
-	err = fpDynamic.ValidateVnetPermissions(ctx, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
+	err = fpDynamic.ValidateVnetPermissions(ctx)
 	if err != nil {
+		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
+			cloudErr.Code = api.CloudErrorCodeInvalidResourceProviderPermissions
+		}
 		return err
 	}
 
-	err = fpDynamic.ValidateRouteTablesPermissions(ctx, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
+	err = fpDynamic.ValidateRouteTablesPermissions(ctx)
 	if err != nil {
+		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
+			cloudErr.Code = api.CloudErrorCodeInvalidResourceProviderPermissions
+		}
 		return err
 	}
 
@@ -97,13 +103,19 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 		return err
 	}
 
-	err = spDynamic.ValidateVnetPermissions(ctx, api.CloudErrorCodeInvalidServicePrincipalPermissions, "provided service principal")
+	err = spDynamic.ValidateVnetPermissions(ctx)
 	if err != nil {
+		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
+			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
+		}
 		return err
 	}
 
-	err = spDynamic.ValidateRouteTablesPermissions(ctx, api.CloudErrorCodeInvalidServicePrincipalPermissions, "provided service principal")
+	err = spDynamic.ValidateRouteTablesPermissions(ctx)
 	if err != nil {
+		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
+			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
+		}
 		return err
 	}
 
