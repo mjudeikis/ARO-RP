@@ -23,6 +23,7 @@ type credentials struct {
 	tenantID     string
 }
 
+// TODO - bvesel this needs to use a token with the graph endpoint instead of resource manager endpoint to prevent regression
 func newAuthorizer(token *adal.ServicePrincipalToken) (refreshable.Authorizer, error) {
 	p := &jwt.Parser{}
 	c := &azureclaim.AzureClaim{}

@@ -174,8 +174,7 @@ func TestGetRouteTableID(t *testing.T) {
 			tt.modifyVnet(vnet)
 		}
 
-		// purposefully hardcoding path to "" so it is not needed in the wantErr message
-		_, err := getRouteTableID(vnet, "", genericSubnet)
+		_, err := getRouteTableID(vnet, genericSubnet)
 		if err != nil && err.Error() != tt.wantErr ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
@@ -347,8 +346,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 			permissions: permissionsClient,
 		}
 
-		// purposefully hardcoding path to "" so it is not needed in the wantErr message
-		err := dv.validateRouteTablePermissions(ctx, tt.rtID, "")
+		err := dv.validateRouteTablePermissions(ctx, tt.rtID)
 		if err != nil && err.Error() != tt.wantErr ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
@@ -395,7 +393,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 					Get(gomock.Any(), resourceGroupName, vnetName, "").
 					Return(vnet, nil)
 			},
-			wantErr: "400: InvalidLinkedVNet: properties.masterProfile.subnetId: The subnet '" + masterSubnet + "' could not be found.",
+			wantErr: "400: InvalidLinkedVNet: : The subnet '" + masterSubnet + "' could not be found.",
 		},
 		{
 			name: "fail: worker subnet ID doesn't exist",
@@ -405,7 +403,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 					Get(gomock.Any(), resourceGroupName, vnetName, "").
 					Return(vnet, nil)
 			},
-			wantErr: "400: InvalidLinkedVNet: properties.workerProfiles[0].subnetId: The subnet '" + workerSubnet + "' could not be found.",
+			wantErr: "400: InvalidLinkedVNet: : The subnet '" + workerSubnet + "' could not be found.",
 		},
 		{
 			name: "fail: permissions don't exist",
@@ -500,8 +498,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 					ResourceType:   "virtualNetworks",
 				},
 
-				masterSubnetID:  masterSubnet,
-				workerSubnetIDs: []string{workerSubnet},
+				subnetIDs: []string{masterSubnet, workerSubnet},
 			}
 
 			if tt.permissionMocks != nil {

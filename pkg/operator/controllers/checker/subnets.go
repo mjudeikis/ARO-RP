@@ -13,51 +13,38 @@ import (
 	azureproviderv1beta1 "sigs.k8s.io/cluster-api-provider-azure/pkg/apis/azureprovider/v1beta1"
 )
 
-func getSubnetIDs(ctx context.Context, vnetID string, clustercli maoclient.Interface) (masterSubnetID string, workerSubnetIDs []string, err error) {
+func getSubnetIDs(ctx context.Context, vnetID string, clustercli maoclient.Interface) ([]string, error) {
+	subnetNames := make(map[string]struct{})
+	subnetIDs := []string{}
 
 	machines, err := clustercli.MachineV1beta1().Machines(machineSetsNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return masterSubnetID, workerSubnetIDs, err
+		return []string{}, err
 	}
-
-	workerSubnetNames := map[string]bool{}
 
 	for _, machine := range machines.Items {
 		if machine.Spec.ProviderSpec.Value == nil {
-			return masterSubnetID, workerSubnetIDs, fmt.Errorf("machine %s: provider spec missing", machine.Name)
+			return []string{}, fmt.Errorf("machine %s: provider spec missing", machine.Name)
 		}
 
 		o, _, err := scheme.Codecs.UniversalDeserializer().Decode(machine.Spec.ProviderSpec.Value.Raw, nil, nil)
 		if err != nil {
-			return masterSubnetID, workerSubnetIDs, err
+			return []string{}, err
 		}
 
 		machineProviderSpec, ok := o.(*azureproviderv1beta1.AzureMachineProviderSpec)
 		if !ok {
 			// This should never happen: codecs uses scheme that has only one registered type
 			// and if something is wrong with the provider spec - decoding should fail
-			return masterSubnetID, workerSubnetIDs, fmt.Errorf("machine %s: failed to read provider spec: %T", machine.Name, o)
+			return []string{}, fmt.Errorf("machine %s: failed to read provider spec: %T", machine.Name, o)
 		}
 
-		isMaster, err := isMasterRole(&machine)
-		if err != nil {
-			return masterSubnetID, workerSubnetIDs, err
-		}
-
-		if isMaster {
-			// Don't need to reset the name if it's already set
-			if masterSubnetID == "" {
-				masterSubnetID = vnetID + "/subnets/" + machineProviderSpec.Subnet
-			}
-		} else {
-			workerSubnetNames[machineProviderSpec.Subnet] = true
-		}
+		subnetNames[machineProviderSpec.Subnet] = struct{}{}
 	}
 
-	// Add unique worker subnet names
-	for k := range workerSubnetNames {
-		workerSubnetIDs = append(workerSubnetIDs, vnetID+"/subnets/"+k)
+	for k := range subnetNames {
+		subnetIDs = append(subnetIDs, vnetID+"/subnets/"+k)
 	}
 
-	return "", []string{}, err
+	return subnetIDs, nil
 }

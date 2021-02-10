@@ -55,16 +55,14 @@ type openShiftClusterDynamicValidator struct {
 
 // Dynamic validates an OpenShift cluster
 func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
-	// Get all subnets
-	mSubnetID := dv.oc.Properties.MasterProfile.SubnetID
-	wSubnetIDs := []string{}
+	subnetIDs := []string{dv.oc.Properties.MasterProfile.SubnetID}
 
 	for _, s := range dv.oc.Properties.WorkerProfiles {
-		wSubnetIDs = append(wSubnetIDs, s.SubnetID)
+		subnetIDs = append(subnetIDs, s.SubnetID)
 	}
 
 	// FP validation
-	fpDynamic, err := NewValidator(dv.log, dv.env.Environment(), mSubnetID, wSubnetIDs, dv.subscriptionDoc.ID, dv.fpAuthorizer)
+	fpDynamic, err := NewValidator(dv.log, dv.env.Environment(), subnetIDs, dv.subscriptionDoc.ID, dv.fpAuthorizer)
 	if err != nil {
 		return err
 	}
@@ -98,7 +96,7 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 
 	spAuthorizer := refreshable.NewAuthorizer(token)
 
-	spDynamic, err := NewValidator(dv.log, dv.env.Environment(), mSubnetID, wSubnetIDs, dv.subscriptionDoc.ID, spAuthorizer)
+	spDynamic, err := NewValidator(dv.log, dv.env.Environment(), subnetIDs, dv.subscriptionDoc.ID, spAuthorizer)
 	if err != nil {
 		return err
 	}

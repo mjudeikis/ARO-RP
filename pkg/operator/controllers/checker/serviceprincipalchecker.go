@@ -66,17 +66,19 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return err
 	}
 
+	// TODO - bvesel Need to check token against graph endpoint (see validateServicePrincipleProfile)
+
 	authorizer, err := newAuthorizer(token)
 	if err != nil {
 		return err
 	}
 
-	masterSubnetID, workerSubnetIDs, err := getSubnetIDs(ctx, cluster.Spec.VnetID, r.clustercli)
+	subnetIDs, err := getSubnetIDs(ctx, cluster.Spec.VnetID, r.clustercli)
 	if err != nil {
 		return err
 	}
 
-	validator, err := validate.NewValidator(r.log, &azEnv, masterSubnetID, workerSubnetIDs, resource.SubscriptionID, authorizer)
+	validator, err := validate.NewValidator(r.log, &azEnv, subnetIDs, resource.SubscriptionID, authorizer)
 	if err != nil {
 		return err
 	}

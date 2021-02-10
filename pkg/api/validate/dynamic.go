@@ -5,9 +5,8 @@ package validate
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -38,17 +37,20 @@ type DynamicValidator interface {
 var _ DynamicValidator = &dynamic{}
 
 type dynamic struct {
-	log             *logrus.Entry
-	vnetr           *azure.Resource
-	masterSubnetID  string
-	workerSubnetIDs []string
+	log       *logrus.Entry
+	vnetr     *azure.Resource
+	subnetIDs []string
 
 	permissions     authorization.PermissionsClient
 	virtualNetworks virtualNetworksGetClient
 }
 
-func NewValidator(log *logrus.Entry, azEnv *azure.Environment, masterSubnetID string, workerSubnetIDs []string, subscriptionID string, authorizer refreshable.Authorizer) (*dynamic, error) {
-	vnetID, _, err := subnet.Split(masterSubnetID)
+func NewValidator(log *logrus.Entry, azEnv *azure.Environment, subnetIDs []string, subscriptionID string, authorizer refreshable.Authorizer) (*dynamic, error) {
+	if len(subnetIDs) < 1 {
+		return nil, errors.New("No subnets found in the OpenShift cluster")
+	}
+
+	vnetID, _, err := subnet.Split(subnetIDs[0])
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +61,9 @@ func NewValidator(log *logrus.Entry, azEnv *azure.Environment, masterSubnetID st
 	}
 
 	return &dynamic{
-		log:             log,
-		vnetr:           &vnetr,
-		masterSubnetID:  masterSubnetID,
-		workerSubnetIDs: workerSubnetIDs,
+		log:       log,
+		vnetr:     &vnetr,
+		subnetIDs: subnetIDs,
 
 		permissions:     authorization.NewPermissionsClient(azEnv, subscriptionID, authorizer),
 		virtualNetworks: newVirtualNetworksCache(network.NewVirtualNetworksClient(azEnv, subscriptionID, authorizer)),
@@ -97,21 +98,10 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 		return err
 	}
 
-	m := map[string]string{}
+	m := make(map[string]struct{})
 
-	rtID, err := getRouteTableID(&vnet, "properties.masterProfile.subnetId", dv.masterSubnetID)
-	if err != nil {
-		return err
-	}
-
-	if rtID != "" {
-		m[strings.ToLower(rtID)] = "properties.masterProfile.subnetId"
-	}
-
-	for i, s := range dv.workerSubnetIDs {
-		path := fmt.Sprintf("properties.workerProfiles[%d].subnetId", i)
-
-		rtID, err := getRouteTableID(&vnet, path, s)
+	for _, s := range dv.subnetIDs {
+		rtID, err := getRouteTableID(&vnet, s)
 		if err != nil {
 			return err
 		}
@@ -119,7 +109,7 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 		if _, ok := m[strings.ToLower(rtID)]; ok || rtID == "" {
 			continue
 		}
-		m[strings.ToLower(rtID)] = path
+		m[strings.ToLower(rtID)] = struct{}{}
 	}
 
 	rts := make([]string, 0, len(m))
@@ -127,10 +117,8 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 		rts = append(rts, rt)
 	}
 
-	sort.Slice(rts, func(i, j int) bool { return strings.Compare(m[rts[i]], m[rts[j]]) < 0 })
-
 	for _, rt := range rts {
-		err := dv.validateRouteTablePermissions(ctx, rt, m[rt])
+		err := dv.validateRouteTablePermissions(ctx, rt)
 		if err != nil {
 			return err
 		}
@@ -139,8 +127,8 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 	return nil
 }
 
-func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID string, path string) error {
-	dv.log.Printf("validateRouteTablePermissions(%s)", path)
+func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID string) error {
+	dv.log.Printf("validateRouteTablePermissions(%s)", rtID)
 
 	rtr, err := azure.ParseResourceID(rtID)
 	if err != nil {
@@ -210,10 +198,10 @@ func (dv *dynamic) validateActions(ctx context.Context, r *azure.Resource, actio
 	}, timeoutCtx.Done())
 }
 
-func getRouteTableID(vnet *mgmtnetwork.VirtualNetwork, path, subnetID string) (string, error) {
+func getRouteTableID(vnet *mgmtnetwork.VirtualNetwork, subnetID string) (string, error) {
 	s := findSubnet(vnet, subnetID)
 	if s == nil {
-		return "", api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, path, "The subnet '%s' could not be found.", subnetID)
+		return "", api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The subnet '%s' could not be found.", subnetID)
 	}
 
 	if s.RouteTable == nil {
