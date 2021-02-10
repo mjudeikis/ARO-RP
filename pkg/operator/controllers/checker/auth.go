@@ -7,14 +7,15 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-autorest/autorest/azure"
 	jwt "github.com/form3tech-oss/jwt-go"
+	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/Azure/ARO-RP/pkg/api"
+	"github.com/Azure/ARO-RP/pkg/util/aad"
 	"github.com/Azure/ARO-RP/pkg/util/azureclaim"
-	"github.com/Azure/ARO-RP/pkg/util/refreshable"
 )
 
 type credentials struct {
@@ -23,22 +24,32 @@ type credentials struct {
 	tenantID     string
 }
 
-// TODO - bvesel this needs to use a token with the graph endpoint instead of resource manager endpoint to prevent regression
-func newAuthorizer(token *adal.ServicePrincipalToken) (refreshable.Authorizer, error) {
+//TODO - this function is duplicated in openshiftcluster_validatedynamic.go move this to a common location
+func validateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env *azure.Environment, clientID string, clientSecret api.SecureString, tenantID string) error {
+	// TODO: once aad.GetToken is mockable, write a unit test for this function
+
+	log.Print("validateServicePrincipalProfile")
+
+	token, err := aad.GetToken(ctx, log, clientID, clientSecret, tenantID, env.ActiveDirectoryEndpoint, env.GraphEndpoint)
+
+	if err != nil {
+		return err
+	}
+
 	p := &jwt.Parser{}
 	c := &azureclaim.AzureClaim{}
-	_, _, err := p.ParseUnverified(token.OAuthToken(), c)
+	_, _, err = p.ParseUnverified(token.OAuthToken(), c)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, role := range c.Roles {
 		if role == "Application.ReadWrite.OwnedBy" {
-			return nil, api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal must not have the Application.ReadWrite.OwnedBy permission.")
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal must not have the Application.ReadWrite.OwnedBy permission.")
 		}
 	}
 
-	return refreshable.NewAuthorizer(token), nil
+	return nil
 }
 
 func azCredentials(ctx context.Context, kubernetescli kubernetes.Interface) (*credentials, error) {

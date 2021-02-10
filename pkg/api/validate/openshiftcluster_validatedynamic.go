@@ -54,6 +54,8 @@ type openShiftClusterDynamicValidator struct {
 }
 
 // Dynamic validates an OpenShift cluster
+// this function should only be called from the context of the RP, as it utilizes document objects
+// TODO - move Dynamic out of this package
 func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 	subnetIDs := []string{dv.oc.Properties.MasterProfile.SubnetID}
 

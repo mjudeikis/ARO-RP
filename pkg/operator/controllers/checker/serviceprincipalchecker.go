@@ -5,6 +5,7 @@ package checker
 
 import (
 	"context"
+	"errors"
 
 	"github.com/Azure/go-autorest/autorest/azure"
 	maoclient "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/Azure/ARO-RP/pkg/api"
-	"github.com/Azure/ARO-RP/pkg/api/validate"
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 	aroclient "github.com/Azure/ARO-RP/pkg/operator/clientset/versioned"
 	"github.com/Azure/ARO-RP/pkg/operator/controllers"
@@ -46,11 +46,6 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return err
 	}
 
-	resource, err := azure.ParseResourceID(cluster.Spec.ResourceID)
-	if err != nil {
-		return err
-	}
-
 	azEnv, err := azure.EnvironmentFromName(cluster.Spec.AZEnvironment)
 	if err != nil {
 		return err
@@ -61,36 +56,19 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return err
 	}
 
-	token, err := aad.GetToken(ctx, r.log, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID, azEnv.ActiveDirectoryEndpoint, azEnv.ResourceManagerEndpoint)
+	// Validate SP creds from graph endpoint
+	err = validateServicePrincipalProfile(ctx, r.log, &azEnv, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID)
 	if err != nil {
-		return err
+		return errors.New("service principal profile credentials are invalid")
 	}
 
-	// TODO - bvesel Need to check token against graph endpoint (see validateServicePrincipleProfile)
-
-	authorizer, err := newAuthorizer(token)
+	// TODO - use token from this to validate VNET and Route tables in future
+	_, err = aad.GetToken(ctx, r.log, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID, azEnv.ActiveDirectoryEndpoint, azEnv.ResourceManagerEndpoint)
 	if err != nil {
-		return err
+		return errors.New("service principal profile credentials are invalid")
 	}
 
-	subnetIDs, err := getSubnetIDs(ctx, cluster.Spec.VnetID, r.clustercli)
-	if err != nil {
-		return err
-	}
-
-	validator, err := validate.NewValidator(r.log, &azEnv, subnetIDs, resource.SubscriptionID, authorizer)
-	if err != nil {
-		return err
-	}
-
-	err = validator.ValidateVnetPermissions(ctx)
-	if err != nil {
-		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
-			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
-		}
-	}
-
-	return err
+	return nil
 }
 
 func (r *ServicePrincipalChecker) Name() string {
@@ -107,8 +85,6 @@ func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
 
 	err := r.servicePrincipalValid(ctx)
 	if err != nil {
-		//TODO - bvesel - check detailed error before setting message
-		//TODO - bvesel: how should we form at error messages
 		cond.Status = corev1.ConditionFalse
 		cond.Message = err.Error()
 	}
