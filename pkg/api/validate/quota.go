@@ -110,7 +110,7 @@ func NewAzureQuotaValidator(ctx context.Context, log *logrus.Entry, env env.Core
 
 	token, err := aad.GetToken(ctx, log, oc.Properties.ServicePrincipalProfile.ClientID, oc.Properties.ServicePrincipalProfile.ClientSecret, subscriptionDoc.Subscription.Properties.TenantID, env.Environment().ActiveDirectoryEndpoint, env.Environment().ResourceManagerEndpoint)
 	if err != nil {
-		return nil, err
+		return nil, translateError(err, api.CloudErrorCodeInvalidServicePrincipalClaims, "")
 	}
 
 	spAuthorizer := refreshable.NewAuthorizer(token)

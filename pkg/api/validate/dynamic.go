@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
 
+	"github.com/Azure/ARO-RP/pkg/api"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/authorization"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/network"
 	utilpermissions "github.com/Azure/ARO-RP/pkg/util/permissions"
@@ -86,11 +87,11 @@ func (dv *dynamic) ValidateVnetPermissions(ctx context.Context) error {
 	})
 
 	if err == wait.ErrWaitTimeout {
-		return &PermissionError{resourceID: dv.vnetr.String(), resourceType: vnetResource}
+		return &api.PermissionError{ResourceID: dv.vnetr.String(), ResourceType: vnetResource}
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
-		return &NotFoundError{resourceID: dv.vnetr.String(), resourceType: vnetResource}
+		return &api.NotFoundError{ResourceID: dv.vnetr.String(), ResourceType: vnetResource}
 	}
 	return err
 }
@@ -146,11 +147,11 @@ func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID strin
 		"Microsoft.Network/routeTables/write",
 	})
 	if err == wait.ErrWaitTimeout {
-		return &PermissionError{resourceID: rtID, resourceType: routeTableResource}
+		return &api.PermissionError{ResourceID: rtID, ResourceType: routeTableResource}
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
-		return &NotFoundError{resourceID: rtID, resourceType: routeTableResource}
+		return &api.NotFoundError{ResourceID: rtID, ResourceType: routeTableResource}
 	}
 	return err
 }
@@ -166,7 +167,7 @@ func (dv *dynamic) ValidateVnetDNS(ctx context.Context) error {
 	if vnet.DhcpOptions != nil &&
 		vnet.DhcpOptions.DNSServers != nil &&
 		len(*vnet.DhcpOptions.DNSServers) > 0 {
-		return &InvalidResourceError{resourceID: *vnet.ID, resourceType: vnetResource, message: "custom DNS servers are not supported"}
+		return &api.InvalidResourceError{ResourceID: *vnet.ID, ResourceType: vnetResource, Message: "custom DNS servers are not supported"}
 	}
 
 	return nil
@@ -206,7 +207,7 @@ func (dv *dynamic) validateActions(ctx context.Context, r *azure.Resource, actio
 func getRouteTableID(vnet *mgmtnetwork.VirtualNetwork, subnetID string) (string, error) {
 	s := findSubnet(vnet, subnetID)
 	if s == nil {
-		return "", &NotFoundError{resourceID: subnetID, resourceType: subnetResource}
+		return "", &api.NotFoundError{ResourceID: subnetID, ResourceType: subnetResource}
 	}
 
 	if s.RouteTable == nil {

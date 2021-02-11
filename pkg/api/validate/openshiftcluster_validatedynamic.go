@@ -83,12 +83,12 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 	// SP validation
 	err = ValidateServicePrincipalProfile(ctx, dv.log, dv.env.Environment(), dv.oc.Properties.ServicePrincipalProfile.ClientID, dv.oc.Properties.ServicePrincipalProfile.ClientSecret, dv.subscriptionDoc.Subscription.Properties.TenantID)
 	if err != nil {
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	token, err := aad.GetToken(ctx, dv.log, dv.oc.Properties.ServicePrincipalProfile.ClientID, dv.oc.Properties.ServicePrincipalProfile.ClientSecret, dv.subscriptionDoc.Subscription.Properties.TenantID, dv.env.Environment().ActiveDirectoryEndpoint, dv.env.Environment().ResourceManagerEndpoint)
 	if err != nil {
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	spAuthorizer := refreshable.NewAuthorizer(token)
@@ -297,7 +297,6 @@ func ValidateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env
 	log.Print("validateServicePrincipalProfile")
 
 	token, err := aad.GetToken(ctx, log, clientID, clientSecret, tenantID, env.ActiveDirectoryEndpoint, env.GraphEndpoint)
-
 	if err != nil {
 		return err
 	}
@@ -311,7 +310,7 @@ func ValidateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env
 
 	for _, role := range c.Roles {
 		if role == "Application.ReadWrite.OwnedBy" {
-			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal must not have the Application.ReadWrite.OwnedBy permission.")
+			return &api.PermissionError{ResourceType: servicePrincipalResource, Message: "must not have the Application.ReadWrite.OwnedBy permission"}
 		}
 	}
 
@@ -333,23 +332,35 @@ func findSubnet(vnet *mgmtnetwork.VirtualNetwork, subnetID string) *mgmtnetwork.
 // translate an error from validate package into a CloudError type
 func translateError(err error, code string, typ string) error {
 	switch err {
-	case err.(*PermissionError):
-		tErr := err.(*PermissionError)
-		return api.NewCloudError(http.StatusBadRequest, code, "", "The %s does not have Network Contributor permission on %s '%s'", typ, tErr.resourceType, tErr.resourceID)
+	case err.(*api.PermissionError):
+		tErr := err.(*api.PermissionError)
 
-	case err.(*NotFoundError):
-		tErr := err.(*NotFoundError)
-
-		switch tErr.resourceType {
-		case vnetResource, subnetResource:
-			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The %s '%s' could not be found.", vnetResource, tErr.resourceID)
-		case routeTableResource:
-			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedRouteTable, "", "The %s '%s' could not be found.", routeTableResource, tErr.resourceID)
+		switch tErr.ResourceType {
+		case vnetResource, subnetResource, routeTableResource:
+			return api.NewCloudError(http.StatusBadRequest, code, "", "The %s does not have Network Contributor permission on %s '%s'", typ, tErr.ResourceType, tErr.ResourceID)
+		case servicePrincipalResource:
+			return api.NewCloudError(http.StatusBadRequest, code, "", "The provided service principal must not have the Application.ReadWrite.OwnedBy permission.")
 		}
 
-	case err.(*InvalidResourceError):
-		tErr := err.(*InvalidResourceError)
-		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The provided %s '%s' is invalid: %s", tErr.resourceType, tErr.resourceID, tErr.message)
+	case err.(*api.NotFoundError):
+		tErr := err.(*api.NotFoundError)
+
+		switch tErr.ResourceType {
+		case vnetResource, subnetResource:
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The %s '%s' could not be found.", vnetResource, tErr.ResourceID)
+		case routeTableResource:
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedRouteTable, "", "The %s '%s' could not be found.", routeTableResource, tErr.ResourceID)
+		}
+
+	case err.(*api.InvalidResourceError):
+		tErr := err.(*api.InvalidResourceError)
+		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The provided %s '%s' is invalid: %s", tErr.ResourceType, tErr.ResourceID, tErr.Message)
+
+	case err.(*api.InvalidCredentialsError):
+		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal credentials are invalid")
+
+	case err.(*api.InvalidTokenClaims):
+		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalClaims, "properties.servicePrincipalProfile", "The provided service principal does not give an access token with at least one of the claims 'altsecid', 'oid', or 'puid'.")
 	}
 
 	return err

@@ -79,7 +79,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", vnetResource, vnetID),
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions.", vnetResource, vnetID),
 		},
 		{
 			name: "fail: not found",
@@ -119,7 +119,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 			}
 
 			err := dv.ValidateVnetPermissions(ctx)
-			if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
+			if err != nil && !strings.EqualFold(strings.TrimSpace(err.Error()), strings.TrimSpace(tt.wantErr)) ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)
 			}
@@ -176,7 +176,7 @@ func TestGetRouteTableID(t *testing.T) {
 		}
 
 		_, err := getRouteTableID(vnet, genericSubnet)
-		if err != nil && err.Error() != tt.wantErr ||
+		if err != nil && !strings.EqualFold(strings.TrimSpace(err.Error()), strings.TrimSpace(tt.wantErr)) ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
 		}
@@ -250,7 +250,7 @@ func TestValidateVnetDNS(t *testing.T) {
 		}
 
 		err := dv.ValidateVnetDNS(ctx)
-		if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
+		if err != nil && !strings.EqualFold(strings.TrimSpace(err.Error()), strings.TrimSpace(tt.wantErr)) ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
 		}
@@ -313,7 +313,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 						},
 					}, nil)
 			},
-			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", routeTableResource, routeTableID),
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions.", routeTableResource, routeTableID),
 		},
 		{
 			name: "fail: not found",
@@ -348,7 +348,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 		}
 
 		err := dv.validateRouteTablePermissions(ctx, tt.rtID)
-		if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
+		if err != nil && !strings.EqualFold(strings.TrimSpace(err.Error()), strings.TrimSpace(tt.wantErr)) ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
 		}
@@ -417,7 +417,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", routeTableResource, rtID),
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions.", routeTableResource, rtID),
 		},
 		{
 			name: "pass",
@@ -491,7 +491,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 			}
 
 			err := dv.ValidateRouteTablesPermissions(ctx)
-			if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
+			if err != nil && !strings.EqualFold(strings.TrimSpace(err.Error()), strings.TrimSpace(tt.wantErr)) ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)
 			}

@@ -5,7 +5,6 @@ package aad
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -46,7 +45,7 @@ func GetToken(ctx context.Context, log *logrus.Entry, clientID string, clientSec
 		var done bool
 		done, err = authorizer.RefreshWithContext(ctx, log)
 		if err != nil {
-			err = api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal credentials are invalid.")
+			err = &api.InvalidCredentialsError{}
 		}
 		if !done || err != nil {
 			return false, err
@@ -68,7 +67,7 @@ func GetToken(ctx context.Context, log *logrus.Entry, clientID string, clientSec
 		// populate err with a user-facing error that will be visible if we're
 		// not successful.
 		log.Info("token does not contain the required claims")
-		err = api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalClaims, "properties.servicePrincipalProfile", "The provided service principal does not give an access token with at least one of the claims 'altsecid', 'oid' or 'puid'.")
+		err = &api.InvalidTokenClaims{}
 
 		return false, nil
 	}, timeoutCtx.Done())
