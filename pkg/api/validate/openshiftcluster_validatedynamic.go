@@ -71,18 +71,12 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 
 	err = fpDynamic.ValidateVnetPermissions(ctx)
 	if err != nil {
-		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
-			cloudErr.Code = api.CloudErrorCodeInvalidResourceProviderPermissions
-		}
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
 	}
 
 	err = fpDynamic.ValidateRouteTablesPermissions(ctx)
 	if err != nil {
-		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
-			cloudErr.Code = api.CloudErrorCodeInvalidResourceProviderPermissions
-		}
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
 	}
 
 	// SP validation
@@ -105,24 +99,18 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 
 	err = spDynamic.ValidateVnetPermissions(ctx)
 	if err != nil {
-		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
-			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
-		}
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	err = spDynamic.ValidateRouteTablesPermissions(ctx)
 	if err != nil {
-		if cloudErr, ok := err.(*api.CloudError); ok && cloudErr.Code == "" {
-			cloudErr.Code = api.CloudErrorCodeInvalidServicePrincipalPermissions
-		}
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	// Additional checks - use any dynamic because they both have the correct permissions
 	err = spDynamic.ValidateVnetDNS(ctx)
 	if err != nil {
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	vnet, err := spDynamic.virtualNetworks.Get(ctx, spDynamic.vnetr.ResourceGroup, spDynamic.vnetr.ResourceName, "")
@@ -337,4 +325,29 @@ func findSubnet(vnet *mgmtnetwork.VirtualNetwork, subnetID string) *mgmtnetwork.
 	}
 
 	return nil
+}
+
+// translate an error from validate package into a CloudError type
+func translateError(err error, code string, typ string) error {
+	switch err {
+	case err.(*PermissionError):
+		tErr := err.(*PermissionError)
+		return api.NewCloudError(http.StatusBadRequest, code, "", "The %s does not have Network Contributor permission on %s '%s'", typ, tErr.resourceType, tErr.resourceID)
+
+	case err.(*NotFoundError):
+		tErr := err.(*NotFoundError)
+
+		switch tErr.resourceType {
+		case vnetResource, subnetResource:
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The %s '%s' could not be found.", vnetResource, tErr.resourceID)
+		case routeTableResource:
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedRouteTable, "", "The %s '%s' could not be found.", routeTableResource, tErr.resourceID)
+		}
+
+	case err.(*InvalidResourceError):
+		tErr := err.(*InvalidResourceError)
+		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The provided %s '%s' is invalid: %s", tErr.resourceType, tErr.resourceID, tErr.message)
+	}
+
+	return err
 }

@@ -68,6 +68,9 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 		return errors.New("service principal profile credentials are invalid")
 	}
 
+	//TODO - this will be used creating a dynamic validator.  Ignoring return so it's not marked as dead code
+	_, _ = getSubnetIDs(ctx, "", r.clustercli)
+
 	return nil
 }
 

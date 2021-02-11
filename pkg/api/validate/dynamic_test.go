@@ -6,6 +6,7 @@ package validate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: "400: : : The subject does not have Network Contributor permission on vnet '" + vnetID + "'.",
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", vnetResource, vnetID),
 		},
 		{
 			name: "fail: not found",
@@ -95,7 +96,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 						},
 					)
 			},
-			wantErr: "400: InvalidLinkedVNet: : The vnet '" + vnetID + "' could not be found.",
+			wantErr: fmt.Sprintf("%s '%s' not found", vnetResource, vnetID),
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -118,7 +119,7 @@ func TestValidateVnetPermissions(t *testing.T) {
 			}
 
 			err := dv.ValidateVnetPermissions(ctx)
-			if err != nil && err.Error() != tt.wantErr ||
+			if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)
 			}
@@ -151,7 +152,7 @@ func TestGetRouteTableID(t *testing.T) {
 			modifyVnet: func(vnet *mgmtnetwork.VirtualNetwork) {
 				vnet.Subnets = nil
 			},
-			wantErr: "400: InvalidLinkedVNet: : The subnet '" + genericSubnet + "' could not be found.",
+			wantErr: fmt.Sprintf("%s '%s' not found", subnetResource, genericSubnet),
 		},
 	} {
 		vnet := &mgmtnetwork.VirtualNetwork{
@@ -217,7 +218,7 @@ func TestValidateVnetDNS(t *testing.T) {
 					Get(gomock.Any(), resourceGroupName, vnetName, "").
 					Return(vnet, nil)
 			},
-			wantErr: "400: InvalidLinkedVNet: : The provided vnet '" + vnetID + "' is invalid: custom DNS servers are not supported.",
+			wantErr: fmt.Sprintf("%s '%s' has attributes that make it invalid: %s", vnetResource, vnetID, "custom DNS servers are not supported"),
 		},
 		{
 			name: "fail: failed to get vnet",
@@ -249,7 +250,7 @@ func TestValidateVnetDNS(t *testing.T) {
 		}
 
 		err := dv.ValidateVnetDNS(ctx)
-		if err != nil && err.Error() != tt.wantErr ||
+		if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
 		}
@@ -312,7 +313,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 						},
 					}, nil)
 			},
-			wantErr: "400: : : The subject does not have Network Contributor permission on route table '" + routeTableID + "'.",
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", routeTableResource, routeTableID),
 		},
 		{
 			name: "fail: not found",
@@ -330,7 +331,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 						},
 					)
 			},
-			wantErr: "400: InvalidLinkedRouteTable: : The route table '" + routeTableID + "' could not be found.",
+			wantErr: fmt.Sprintf("%s '%s' not found", routeTableResource, routeTableID),
 		},
 	} {
 		ctx, cancel := context.WithCancel(ctx)
@@ -347,7 +348,7 @@ func TestValidateRouteTablePermissions(t *testing.T) {
 		}
 
 		err := dv.validateRouteTablePermissions(ctx, tt.rtID)
-		if err != nil && err.Error() != tt.wantErr ||
+		if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
 			err == nil && tt.wantErr != "" {
 			t.Error(err)
 		}
@@ -362,10 +363,8 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 	resourceGroupID := "/subscriptions/" + subscriptionID + "/resourceGroups/" + resourceGroupName
 	vnetName := "testVnet"
 	vnetID := resourceGroupID + "/providers/Microsoft.Network/virtualNetworks/" + vnetName
-	masterSubnet := vnetID + "/subnet/masterSubnet"
-	workerSubnet := vnetID + "/subnet/workerSubnet"
-	masterRtID := resourceGroupID + "/providers/Microsoft.Network/routeTables/masterRt"
-	workerRtID := resourceGroupID + "/providers/Microsoft.Network/routeTables/workerRt"
+	subnetID := vnetID + "/subnet/subnetID"
+	rtID := resourceGroupID + "/providers/Microsoft.Network/routeTables/routeTable"
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -386,24 +385,14 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 			wantErr: "failed to get vnet",
 		},
 		{
-			name: "fail: master subnet doesn't exist",
+			name: "fail: subnet doesn't exist",
 			vnetMocks: func(vnetClient *mock_network.MockVirtualNetworksClient, vnet mgmtnetwork.VirtualNetwork) {
 				vnet.Subnets = nil
 				vnetClient.EXPECT().
 					Get(gomock.Any(), resourceGroupName, vnetName, "").
 					Return(vnet, nil)
 			},
-			wantErr: "400: InvalidLinkedVNet: : The subnet '" + masterSubnet + "' could not be found.",
-		},
-		{
-			name: "fail: worker subnet ID doesn't exist",
-			vnetMocks: func(vnetClient *mock_network.MockVirtualNetworksClient, vnet mgmtnetwork.VirtualNetwork) {
-				(*vnet.Subnets)[1].ID = to.StringPtr("not valid")
-				vnetClient.EXPECT().
-					Get(gomock.Any(), resourceGroupName, vnetName, "").
-					Return(vnet, nil)
-			},
-			wantErr: "400: InvalidLinkedVNet: : The subnet '" + workerSubnet + "' could not be found.",
+			wantErr: fmt.Sprintf("%s '%s' not found", subnetResource, subnetID),
 		},
 		{
 			name: "fail: permissions don't exist",
@@ -428,7 +417,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 						nil,
 					)
 			},
-			wantErr: "400: : : The subject does not have Network Contributor permission on route table '" + strings.ToLower(masterRtID) + "'.",
+			wantErr: fmt.Sprintf("%s '%s' does not have the correct permissions", routeTableResource, rtID),
 		},
 		{
 			name: "pass",
@@ -466,18 +455,10 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 				VirtualNetworkPropertiesFormat: &mgmtnetwork.VirtualNetworkPropertiesFormat{
 					Subnets: &[]mgmtnetwork.Subnet{
 						{
-							ID: &masterSubnet,
+							ID: &subnetID,
 							SubnetPropertiesFormat: &mgmtnetwork.SubnetPropertiesFormat{
 								RouteTable: &mgmtnetwork.RouteTable{
-									ID: &masterRtID,
-								},
-							},
-						},
-						{
-							ID: &workerSubnet,
-							SubnetPropertiesFormat: &mgmtnetwork.SubnetPropertiesFormat{
-								RouteTable: &mgmtnetwork.RouteTable{
-									ID: &workerRtID,
+									ID: &rtID,
 								},
 							},
 						},
@@ -498,7 +479,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 					ResourceType:   "virtualNetworks",
 				},
 
-				subnetIDs: []string{masterSubnet, workerSubnet},
+				subnetIDs: []string{subnetID},
 			}
 
 			if tt.permissionMocks != nil {
@@ -510,7 +491,7 @@ func TestValidateRouteTablesPermissions(t *testing.T) {
 			}
 
 			err := dv.ValidateRouteTablesPermissions(ctx)
-			if err != nil && err.Error() != tt.wantErr ||
+			if err != nil && !strings.EqualFold(err.Error(), tt.wantErr) ||
 				err == nil && tt.wantErr != "" {
 				t.Error(err)
 			}
