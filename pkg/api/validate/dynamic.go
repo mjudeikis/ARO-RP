@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -115,6 +116,8 @@ func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
 	for rt := range m {
 		rts = append(rts, rt)
 	}
+
+	sort.Slice(rts, func(i, j int) bool { return strings.Compare(rts[i], rts[j]) < 0 })
 
 	for _, rt := range rts {
 		err := dv.validateRouteTablePermissions(ctx, rt)
