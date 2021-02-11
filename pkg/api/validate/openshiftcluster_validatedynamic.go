@@ -12,6 +12,7 @@ import (
 
 	mgmtnetwork "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-07-01/network"
 	mgmtfeatures "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-07-01/features"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/apparentlymart/go-cidr/cidr"
 	jwt "github.com/form3tech-oss/jwt-go"
 	"github.com/sirupsen/logrus"
@@ -80,7 +81,7 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 	}
 
 	// SP validation
-	err = validateServicePrincipalProfile(ctx, dv.log, dv.env, dv.oc, dv.subscriptionDoc)
+	err = ValidateServicePrincipalProfile(ctx, dv.log, dv.env.Environment(), dv.oc.Properties.ServicePrincipalProfile.ClientID, dv.oc.Properties.ServicePrincipalProfile.ClientSecret, dv.subscriptionDoc.Subscription.Properties.TenantID)
 	if err != nil {
 		return err
 	}
@@ -288,12 +289,14 @@ func (dv *openShiftClusterDynamicValidator) validateProviders(ctx context.Contex
 	return nil
 }
 
-func validateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env env.Core, oc *api.OpenShiftCluster, sub *api.SubscriptionDocument) error {
+// ValidateServicePrincipalProfile validates the cluster service principal against the Azure graph endpoint to ensure that the service principal doesn't have
+// the Application.ReadWrite.OwnedBy permission
+func ValidateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env *azure.Environment, clientID string, clientSecret api.SecureString, tenantID string) error {
 	// TODO: once aad.GetToken is mockable, write a unit test for this function
 
 	log.Print("validateServicePrincipalProfile")
 
-	token, err := aad.GetToken(ctx, log, oc.Properties.ServicePrincipalProfile.ClientID, oc.Properties.ServicePrincipalProfile.ClientSecret, sub.Subscription.Properties.TenantID, env.Environment().ActiveDirectoryEndpoint, env.Environment().GraphEndpoint)
+	token, err := aad.GetToken(ctx, log, clientID, clientSecret, tenantID, env.ActiveDirectoryEndpoint, env.GraphEndpoint)
 
 	if err != nil {
 		return err

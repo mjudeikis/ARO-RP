@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/Azure/ARO-RP/pkg/api"
+	"github.com/Azure/ARO-RP/pkg/api/validate"
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 	aroclient "github.com/Azure/ARO-RP/pkg/operator/clientset/versioned"
 	"github.com/Azure/ARO-RP/pkg/operator/controllers"
@@ -57,7 +58,7 @@ func (r *ServicePrincipalChecker) servicePrincipalValid(ctx context.Context) err
 	}
 
 	// Validate SP creds from graph endpoint
-	err = validateServicePrincipalProfile(ctx, r.log, &azEnv, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID)
+	err = validate.ValidateServicePrincipalProfile(ctx, r.log, &azEnv, azCred.clientID, api.SecureString(azCred.clientSecret), azCred.tenantID)
 	if err != nil {
 		return errors.New("service principal profile credentials are invalid")
 	}

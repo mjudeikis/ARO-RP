@@ -46,6 +46,9 @@ type dynamic struct {
 }
 
 func NewValidator(log *logrus.Entry, azEnv *azure.Environment, subnetIDs []string, subscriptionID string, authorizer refreshable.Authorizer) (*dynamic, error) {
+	// TODO - there exists a possibility that the subnets passed into the validator are not part of the same vnet.
+	// this logic should change to account for the fact that there may be multiple vnets that need to be validated along
+	// with parsing through all associated route tables.
 	if len(subnetIDs) < 1 {
 		return nil, errors.New("No subnets found in the OpenShift cluster")
 	}

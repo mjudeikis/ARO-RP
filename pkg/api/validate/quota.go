@@ -103,7 +103,7 @@ func NewAzureQuotaValidator(ctx context.Context, log *logrus.Entry, env env.Core
 		return nil, err
 	}
 
-	err = validateServicePrincipalProfile(ctx, log, env, oc, subscriptionDoc)
+	err = ValidateServicePrincipalProfile(ctx, log, env.Environment(), oc.Properties.ServicePrincipalProfile.ClientID, oc.Properties.ServicePrincipalProfile.ClientSecret, subscriptionDoc.Subscription.Properties.TenantID)
 	if err != nil {
 		return nil, err
 	}

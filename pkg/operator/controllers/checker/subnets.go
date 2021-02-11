@@ -14,6 +14,8 @@ import (
 )
 
 func getSubnetIDs(ctx context.Context, vnetID string, clustercli maoclient.Interface) ([]string, error) {
+	// TODO - there exists a possibility that the subnets discovered here are not part of the same vnet or even in the same subscription
+	// it is an unlikely circumstance but still possible so this logic should account for it.
 	subnetNames := make(map[string]struct{})
 	subnetIDs := []string{}
 
