@@ -125,14 +125,9 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
-	err = dv.validateCIDRRanges(ctx, &vnet)
+	err = spDynamic.ValidateVnetLocation(ctx, vnetID, dv.oc.Location)
 	if err != nil {
-		return err
-	}
-
-	err = dv.validateVnetLocation(ctx, &vnet)
-	if err != nil {
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	err = dv.validateProviders(ctx)

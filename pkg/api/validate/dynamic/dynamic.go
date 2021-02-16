@@ -12,13 +12,16 @@ import (
 	"time"
 
 	mgmtnetwork "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-07-01/network"
+	mgmtfeatures "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-07-01/features"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
 
+	"github.com/Azure/ARO-RP/pkg/api"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/authorization"
+	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/features"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/network"
 	utilpermissions "github.com/Azure/ARO-RP/pkg/util/permissions"
 	"github.com/Azure/ARO-RP/pkg/util/refreshable"
@@ -29,6 +32,10 @@ import (
 // DynamicValidator validates in the operator context.
 type DynamicValidator interface {
 	ValidateVnetPermissions(ctx context.Context, vnetID string) error
+	ValidateVnetLocation(ctx context.Context, vnetID string, location string) error
+
+	ValidateProviders(ctx context.Context) error
+
 	ValidateSubnetsRouteTablesPermissions(ctx context.Context, subnetsIDS []string) error
 	ValidateVnetDNS(ctx context.Context, vnetID string) error
 	ValidateSubnetsCIDRRanges(ctx context.Context, subnetIDs []string, additionalCIDRs ...string) error
@@ -42,6 +49,7 @@ type dynamic struct {
 	log *logrus.Entry
 
 	permissions     authorization.PermissionsClient
+	providers       features.ProvidersClient
 	virtualNetworks virtualNetworksGetClient
 }
 
@@ -50,6 +58,7 @@ func NewValidator(log *logrus.Entry, azEnv *azure.Environment, subscriptionID st
 		log: log,
 
 		permissions:     authorization.NewPermissionsClient(azEnv, subscriptionID, authorizer),
+		providers:       features.NewProvidersClient(azEnv, subscriptionID, authorizer),
 		virtualNetworks: newVirtualNetworksCache(network.NewVirtualNetworksClient(azEnv, subscriptionID, authorizer)),
 	}, nil
 }
@@ -237,7 +246,56 @@ func (dv *dynamic) ValidateSubnetsCIDRRanges(ctx context.Context, subnetIDs []st
 	}
 
 	return nil
+}
 
+func (dv *dynamic) ValidateVnetLocation(ctx context.Context, vnetID string, location string) error {
+	dv.log.Print("validateVnetLocation")
+	vnetr, err := azure.ParseResourceID(vnetID)
+	if err != nil {
+		return err
+	}
+
+	vnet, err := dv.virtualNetworks.Get(ctx, vnetr.ResourceGroup, vnetr.ResourceName, "")
+	if err != nil {
+		return err
+	}
+
+	if !strings.EqualFold(*vnet.Location, location) {
+		return &InvalidResourceError{
+			GenericError: &GenericError{
+				ResourceID: *vnet.ID, ResourceType: vnetResource, Message: "The vnet location must match the cluster location.",
+			}}
+	}
+	return nil
+}
+
+func (dv *dynamic) ValidateProviders(ctx context.Context) error {
+	dv.log.Print("validateProviders")
+
+	providers, err := dv.providers.List(ctx, nil, "")
+	if err != nil {
+		return err
+	}
+
+	providerMap := make(map[string]mgmtfeatures.Provider, len(providers))
+
+	for _, provider := range providers {
+		providerMap[*provider.Namespace] = provider
+	}
+
+	for _, provider := range []string{
+		"Microsoft.Authorization",
+		"Microsoft.Compute",
+		"Microsoft.Network",
+		"Microsoft.Storage",
+	} {
+		if providerMap[provider].RegistrationState == nil ||
+			*providerMap[provider].RegistrationState != "Registered" {
+			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorResourceProviderNotRegistered, "", "The resource provider '%s' is not registered.", provider)
+		}
+	}
+
+	return nil
 }
 
 func (dv *dynamic) validateActions(ctx context.Context, r *azure.Resource, actions []string) error {
