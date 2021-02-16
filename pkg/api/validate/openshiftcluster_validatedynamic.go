@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/Azure/ARO-RP/pkg/api"
+	"github.com/Azure/ARO-RP/pkg/api/validate/dynamic"
 	"github.com/Azure/ARO-RP/pkg/env"
 	"github.com/Azure/ARO-RP/pkg/util/aad"
 	"github.com/Azure/ARO-RP/pkg/util/azureclaim"
@@ -64,18 +65,23 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 		subnetIDs = append(subnetIDs, s.SubnetID)
 	}
 
-	// FP validation
-	fpDynamic, err := NewValidator(dv.log, dv.env.Environment(), subnetIDs, dv.subscriptionDoc.ID, dv.fpAuthorizer)
+	vnetID, _, err := subnet.Split(subnetIDs[0])
 	if err != nil {
 		return err
 	}
 
-	err = fpDynamic.ValidateVnetPermissions(ctx)
+	// FP validation
+	fpDynamic, err := dynamic.NewValidator(dv.log, dv.env.Environment(), dv.subscriptionDoc.ID, dv.fpAuthorizer)
+	if err != nil {
+		return err
+	}
+
+	err = fpDynamic.ValidateVnetPermissions(ctx, vnetID)
 	if err != nil {
 		return translateError(err, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
 	}
 
-	err = fpDynamic.ValidateRouteTablesPermissions(ctx)
+	err = fpDynamic.ValidateSubnetsRouteTablesPermissions(ctx, subnetIDs)
 	if err != nil {
 		return translateError(err, api.CloudErrorCodeInvalidResourceProviderPermissions, "resource provider")
 	}
@@ -93,30 +99,30 @@ func (dv *openShiftClusterDynamicValidator) Dynamic(ctx context.Context) error {
 
 	spAuthorizer := refreshable.NewAuthorizer(token)
 
-	spDynamic, err := NewValidator(dv.log, dv.env.Environment(), subnetIDs, dv.subscriptionDoc.ID, spAuthorizer)
+	spDynamic, err := dynamic.NewValidator(dv.log, dv.env.Environment(), dv.subscriptionDoc.ID, spAuthorizer)
 	if err != nil {
 		return err
 	}
 
-	err = spDynamic.ValidateVnetPermissions(ctx)
+	err = spDynamic.ValidateVnetPermissions(ctx, vnetID)
 	if err != nil {
 		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
-	err = spDynamic.ValidateRouteTablesPermissions(ctx)
+	err = spDynamic.ValidateSubnetsRouteTablesPermissions(ctx, subnetIDs)
 	if err != nil {
 		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	// Additional checks - use any dynamic because they both have the correct permissions
-	err = spDynamic.ValidateVnetDNS(ctx)
+	err = spDynamic.ValidateVnetDNS(ctx, vnetID)
 	if err != nil {
 		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
-	vnet, err := spDynamic.virtualNetworks.Get(ctx, spDynamic.vnetr.ResourceGroup, spDynamic.vnetr.ResourceName, "")
+	err = spDynamic.ValidateSubnetsCIDRRanges(ctx, subnetIDs, dv.oc.Properties.NetworkProfile.PodCIDR, dv.oc.Properties.NetworkProfile.ServiceCIDR)
 	if err != nil {
-		return err
+		return translateError(err, api.CloudErrorCodeInvalidServicePrincipalPermissions, "service principal")
 	}
 
 	err = dv.validateCIDRRanges(ctx, &vnet)
@@ -310,19 +316,7 @@ func ValidateServicePrincipalProfile(ctx context.Context, log *logrus.Entry, env
 
 	for _, role := range c.Roles {
 		if role == "Application.ReadWrite.OwnedBy" {
-			return &api.PermissionError{ResourceType: servicePrincipalResource, Message: "must not have the Application.ReadWrite.OwnedBy permission"}
-		}
-	}
-
-	return nil
-}
-
-func findSubnet(vnet *mgmtnetwork.VirtualNetwork, subnetID string) *mgmtnetwork.Subnet {
-	if vnet.Subnets != nil {
-		for _, s := range *vnet.Subnets {
-			if strings.EqualFold(*s.ID, subnetID) {
-				return &s
-			}
+			return &PermissionError{ResourceType: servicePrincipalResource, Message: "must not have the Application.ReadWrite.OwnedBy permission"}
 		}
 	}
 
@@ -332,8 +326,8 @@ func findSubnet(vnet *mgmtnetwork.VirtualNetwork, subnetID string) *mgmtnetwork.
 // translate an error from validate package into a CloudError type
 func translateError(err error, code string, typ string) error {
 	switch err {
-	case err.(*api.PermissionError):
-		tErr := err.(*api.PermissionError)
+	case err.(*PermissionError):
+		tErr := err.(*PermissionError)
 
 		switch tErr.ResourceType {
 		case vnetResource, subnetResource, routeTableResource:
@@ -342,8 +336,8 @@ func translateError(err error, code string, typ string) error {
 			return api.NewCloudError(http.StatusBadRequest, code, "", "The provided service principal must not have the Application.ReadWrite.OwnedBy permission.")
 		}
 
-	case err.(*api.NotFoundError):
-		tErr := err.(*api.NotFoundError)
+	case err.(*NotFoundError):
+		tErr := err.(*NotFoundError)
 
 		switch tErr.ResourceType {
 		case vnetResource, subnetResource:
@@ -352,14 +346,14 @@ func translateError(err error, code string, typ string) error {
 			return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedRouteTable, "", "The %s '%s' could not be found.", routeTableResource, tErr.ResourceID)
 		}
 
-	case err.(*api.InvalidResourceError):
-		tErr := err.(*api.InvalidResourceError)
+	case err.(*InvalidResourceError):
+		tErr := err.(*InvalidResourceError)
 		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidLinkedVNet, "", "The provided %s '%s' is invalid: %s", tErr.ResourceType, tErr.ResourceID, tErr.Message)
 
-	case err.(*api.InvalidCredentialsError):
+	case err.(*InvalidCredentialsError):
 		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalCredentials, "properties.servicePrincipalProfile", "The provided service principal credentials are invalid")
 
-	case err.(*api.InvalidTokenClaims):
+	case err.(*InvalidTokenClaims):
 		return api.NewCloudError(http.StatusBadRequest, api.CloudErrorCodeInvalidServicePrincipalClaims, "properties.servicePrincipalProfile", "The provided service principal does not give an access token with at least one of the claims 'altsecid', 'oid', or 'puid'.")
 	}
 

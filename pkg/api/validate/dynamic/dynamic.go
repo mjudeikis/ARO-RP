@@ -1,11 +1,11 @@
-package validate
+package dynamic
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the Apache License 2.0.
 
 import (
 	"context"
-	"errors"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -14,10 +14,10 @@ import (
 	mgmtnetwork "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-07-01/network"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"github.com/Azure/ARO-RP/pkg/api"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/authorization"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/network"
 	utilpermissions "github.com/Azure/ARO-RP/pkg/util/permissions"
@@ -28,9 +28,10 @@ import (
 
 // DynamicValidator validates in the operator context.
 type DynamicValidator interface {
-	ValidateVnetPermissions(ctx context.Context) error
-	ValidateRouteTablesPermissions(ctx context.Context) error
-	ValidateVnetDNS(ctx context.Context) error
+	ValidateVnetPermissions(ctx context.Context, vnetID string) error
+	ValidateSubnetsRouteTablesPermissions(ctx context.Context, subnetsIDS []string) error
+	ValidateVnetDNS(ctx context.Context, vnetID string) error
+	ValidateSubnetsCIDRRanges(ctx context.Context, subnetIDs []string, additionalCIDRs ...string) error
 	// etc
 	// does Quota code go in here too?
 }
@@ -38,46 +39,30 @@ type DynamicValidator interface {
 var _ DynamicValidator = &dynamic{}
 
 type dynamic struct {
-	log       *logrus.Entry
-	vnetr     *azure.Resource
-	subnetIDs []string
+	log *logrus.Entry
 
 	permissions     authorization.PermissionsClient
 	virtualNetworks virtualNetworksGetClient
 }
 
-func NewValidator(log *logrus.Entry, azEnv *azure.Environment, subnetIDs []string, subscriptionID string, authorizer refreshable.Authorizer) (*dynamic, error) {
-	// TODO - there exists a possibility that the subnets passed into the validator are not part of the same vnet.
-	// this logic should change to account for the fact that there may be multiple vnets that need to be validated along
-	// with parsing through all associated route tables.
-	if len(subnetIDs) < 1 {
-		return nil, errors.New("No subnets found in the OpenShift cluster")
-	}
-
-	vnetID, _, err := subnet.Split(subnetIDs[0])
-	if err != nil {
-		return nil, err
-	}
-
-	vnetr, err := azure.ParseResourceID(vnetID)
-	if err != nil {
-		return nil, err
-	}
-
+func NewValidator(log *logrus.Entry, azEnv *azure.Environment, subscriptionID string, authorizer refreshable.Authorizer) (*dynamic, error) {
 	return &dynamic{
-		log:       log,
-		vnetr:     &vnetr,
-		subnetIDs: subnetIDs,
+		log: log,
 
 		permissions:     authorization.NewPermissionsClient(azEnv, subscriptionID, authorizer),
 		virtualNetworks: newVirtualNetworksCache(network.NewVirtualNetworksClient(azEnv, subscriptionID, authorizer)),
 	}, nil
 }
 
-func (dv *dynamic) ValidateVnetPermissions(ctx context.Context) error {
+func (dv *dynamic) ValidateVnetPermissions(ctx context.Context, vnetID string) error {
+	vnetr, err := azure.ParseResourceID(vnetID)
+	if err != nil {
+		return err
+	}
+
 	dv.log.Printf("ValidateVnetPermissions")
 
-	err := dv.validateActions(ctx, dv.vnetr, []string{
+	err = dv.validateActions(ctx, &vnetr, []string{
 		"Microsoft.Network/virtualNetworks/join/action",
 		"Microsoft.Network/virtualNetworks/read",
 		"Microsoft.Network/virtualNetworks/write",
@@ -87,24 +72,41 @@ func (dv *dynamic) ValidateVnetPermissions(ctx context.Context) error {
 	})
 
 	if err == wait.ErrWaitTimeout {
-		return &api.PermissionError{ResourceID: dv.vnetr.String(), ResourceType: vnetResource}
+		return &PermissionError{
+			GenericError: &GenericError{
+				ResourceID: vnetr.String(), ResourceType: vnetResource,
+			}}
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
-		return &api.NotFoundError{ResourceID: dv.vnetr.String(), ResourceType: vnetResource}
+		return &NotFoundError{
+			GenericError: &GenericError{
+				ResourceID: vnetr.String(), ResourceType: vnetResource,
+			}}
 	}
+
 	return err
 }
 
-func (dv *dynamic) ValidateRouteTablesPermissions(ctx context.Context) error {
-	vnet, err := dv.virtualNetworks.Get(ctx, dv.vnetr.ResourceGroup, dv.vnetr.ResourceName, "")
+func (dv *dynamic) ValidateSubnetsRouteTablesPermissions(ctx context.Context, subnetIDs []string) error {
+	vnetID, _, err := subnet.Split(subnetIDs[0])
+	if err != nil {
+		return err
+	}
+
+	vnetr, err := azure.ParseResourceID(vnetID)
+	if err != nil {
+		return err
+	}
+
+	vnet, err := dv.virtualNetworks.Get(ctx, vnetr.ResourceGroup, vnetr.ResourceName, "")
 	if err != nil {
 		return err
 	}
 
 	m := make(map[string]struct{})
 
-	for _, s := range dv.subnetIDs {
+	for _, s := range subnetIDs {
 		rtID, err := getRouteTableID(&vnet, s)
 		if err != nil {
 			return err
@@ -147,19 +149,30 @@ func (dv *dynamic) validateRouteTablePermissions(ctx context.Context, rtID strin
 		"Microsoft.Network/routeTables/write",
 	})
 	if err == wait.ErrWaitTimeout {
-		return &api.PermissionError{ResourceID: rtID, ResourceType: routeTableResource}
+		return &PermissionError{
+			GenericError: &GenericError{
+				ResourceID: rtID, ResourceType: routeTableResource,
+			}}
 	}
 	if detailedErr, ok := err.(autorest.DetailedError); ok &&
 		detailedErr.StatusCode == http.StatusNotFound {
-		return &api.NotFoundError{ResourceID: rtID, ResourceType: routeTableResource}
+		return &NotFoundError{
+			GenericError: &GenericError{
+				ResourceID: rtID, ResourceType: routeTableResource,
+			}}
 	}
 	return err
 }
 
-func (dv *dynamic) ValidateVnetDNS(ctx context.Context) error {
+func (dv *dynamic) ValidateVnetDNS(ctx context.Context, vnetID string) error {
 	dv.log.Print("validateVnetDNS")
 
-	vnet, err := dv.virtualNetworks.Get(ctx, dv.vnetr.ResourceGroup, dv.vnetr.ResourceName, "")
+	vnetr, err := azure.ParseResourceID(vnetID)
+	if err != nil {
+		return err
+	}
+
+	vnet, err := dv.virtualNetworks.Get(ctx, vnetr.ResourceGroup, vnetr.ResourceName, "")
 	if err != nil {
 		return err
 	}
@@ -167,10 +180,64 @@ func (dv *dynamic) ValidateVnetDNS(ctx context.Context) error {
 	if vnet.DhcpOptions != nil &&
 		vnet.DhcpOptions.DNSServers != nil &&
 		len(*vnet.DhcpOptions.DNSServers) > 0 {
-		return &api.InvalidResourceError{ResourceID: *vnet.ID, ResourceType: vnetResource, Message: "custom DNS servers are not supported"}
+		return &InvalidResourceError{
+			GenericError: &GenericError{
+				ResourceID: *vnet.ID, ResourceType: vnetResource, Message: "custom DNS servers are not supported",
+			}}
 	}
 
 	return nil
+}
+
+func (dv *dynamic) ValidateSubnetsCIDRRanges(ctx context.Context, subnetIDs []string, additionalCIDRs ...string) error {
+	dv.log.Print("validateCIDRRanges")
+	vnetID, _, err := subnet.Split(subnetIDs[0])
+	if err != nil {
+		return err
+	}
+
+	vnetr, err := azure.ParseResourceID(vnetID)
+	if err != nil {
+		return err
+	}
+
+	vnet, err := dv.virtualNetworks.Get(ctx, vnetr.ResourceGroup, vnetr.ResourceName, "")
+	if err != nil {
+		return err
+	}
+
+	var CIDRArray []*net.IPNet
+
+	// unique names of subnets from all node pools
+	for _, subnet := range subnetIDs {
+		s := findSubnet(&vnet, subnet)
+		if s != nil {
+			_, net, err := net.ParseCIDR(*s.AddressPrefix)
+			if err != nil {
+				return err
+			}
+			CIDRArray = append(CIDRArray, net)
+		}
+	}
+
+	for _, c := range additionalCIDRs {
+		_, cidr, err := net.ParseCIDR(c)
+		if err != nil {
+			return err
+		}
+		CIDRArray = append(CIDRArray, cidr)
+	}
+
+	err = cidr.VerifyNoOverlap(CIDRArray, &net.IPNet{IP: net.IPv4zero, Mask: net.IPMask(net.IPv4zero)})
+	if err != nil {
+		return &InvalidResourceError{
+			GenericError: &GenericError{
+				ResourceID: *vnet.ID, ResourceType: subnetResource, Message: "The provided CIDRs must not overlap.",
+			}}
+	}
+
+	return nil
+
 }
 
 func (dv *dynamic) validateActions(ctx context.Context, r *azure.Resource, actions []string) error {
@@ -207,7 +274,10 @@ func (dv *dynamic) validateActions(ctx context.Context, r *azure.Resource, actio
 func getRouteTableID(vnet *mgmtnetwork.VirtualNetwork, subnetID string) (string, error) {
 	s := findSubnet(vnet, subnetID)
 	if s == nil {
-		return "", &api.NotFoundError{ResourceID: subnetID, ResourceType: subnetResource}
+		return "", &NotFoundError{
+			GenericError: &GenericError{
+				ResourceID: subnetID, ResourceType: subnetResource,
+			}}
 	}
 
 	if s.RouteTable == nil {
@@ -215,4 +285,16 @@ func getRouteTableID(vnet *mgmtnetwork.VirtualNetwork, subnetID string) (string,
 	}
 
 	return *s.RouteTable.ID, nil
+}
+
+func findSubnet(vnet *mgmtnetwork.VirtualNetwork, subnetID string) *mgmtnetwork.Subnet {
+	if vnet.Subnets != nil {
+		for _, s := range *vnet.Subnets {
+			if strings.EqualFold(*s.ID, subnetID) {
+				return &s
+			}
+		}
+	}
+
+	return nil
 }
