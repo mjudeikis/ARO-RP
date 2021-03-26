@@ -88,7 +88,7 @@ require (
 	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3 // indirect
-	github.com/ugorji/go/codec v1.2.6
+	github.com/ugorji/go/codec v1.2.5-0.20210326071331-11d01daad36c
 	github.com/vbauerster/mpb/v6 v6.0.4 // indirect
 	github.com/vmware/govmomi v0.25.0 // indirect
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
