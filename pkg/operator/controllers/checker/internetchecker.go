@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/operator-framework/operator-sdk/pkg/status"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,17 +94,17 @@ func (r *InternetChecker) Check(ctx context.Context) error {
 		}
 	}
 
-	var condition *status.Condition
+	var condition *arov1alpha1.Condition
 
 	if checkFailed {
-		condition = &status.Condition{
+		condition = &arov1alpha1.Condition{
 			Type:    r.conditionType(),
 			Status:  corev1.ConditionFalse,
 			Message: sb.String(),
 			Reason:  "CheckFailed",
 		}
 	} else {
-		condition = &status.Condition{
+		condition = &arov1alpha1.Condition{
 			Type:    r.conditionType(),
 			Status:  corev1.ConditionTrue,
 			Message: "Outgoing connection successful",
@@ -163,7 +162,7 @@ func (r *InternetChecker) checkOnce(client simpleHTTPClient, url string, timeout
 	return nil
 }
 
-func (r *InternetChecker) conditionType() (ctype status.ConditionType) {
+func (r *InternetChecker) conditionType() (ctype arov1alpha1.ConditionType) {
 	switch r.role {
 	case operator.RoleMaster:
 		return arov1alpha1.InternetReachableFromMaster

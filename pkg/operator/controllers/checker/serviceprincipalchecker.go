@@ -8,7 +8,6 @@ import (
 
 	"github.com/Azure/go-autorest/autorest/azure"
 	maoclient "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
-	"github.com/operator-framework/operator-sdk/pkg/status"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,7 +46,7 @@ func (r *ServicePrincipalChecker) Name() string {
 }
 
 func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
-	cond := &status.Condition{
+	cond := &arov1alpha1.Condition{
 		Type:    arov1alpha1.ServicePrincipalValid,
 		Status:  corev1.ConditionTrue,
 		Message: "service principal is valid",
@@ -92,7 +91,28 @@ func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
 	return controllers.SetCondition(ctx, r.arocli, cond, r.role)
 }
 
-func updateFailedCondition(cond *status.Condition, err error) {
+type credentials struct {
+	clientID     string
+	clientSecret string
+	tenantID     string
+}
+
+func azCredentials(ctx context.Context, kubernetescli kubernetes.Interface) (*credentials, error) {
+	var creds credentials
+
+	mysec, err := kubernetescli.CoreV1().Secrets(azureCredentialSecretNamespace).Get(ctx, azureCredentialSecretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	creds.clientID = string(mysec.Data["azure_client_id"])
+	creds.clientSecret = string(mysec.Data["azure_client_secret"])
+	creds.tenantID = string(mysec.Data["azure_tenant_id"])
+
+	return &creds, nil
+}
+
+func updateFailedCondition(cond *arov1alpha1.Condition, err error) {
 	cond.Status = corev1.ConditionFalse
 	if tErr, ok := err.(*api.CloudError); ok {
 		cond.Message = tErr.Message

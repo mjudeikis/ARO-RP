@@ -6,7 +6,6 @@ package cluster
 import (
 	"context"
 
-	"github.com/operator-framework/operator-sdk/pkg/status"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +13,7 @@ import (
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 )
 
-var aroOperatorConditionsExpected = map[status.ConditionType]corev1.ConditionStatus{
+var aroOperatorConditionsExpected = map[arov1alpha1.ConditionType]corev1.ConditionStatus{
 	arov1alpha1.InternetReachableFromMaster: corev1.ConditionTrue,
 	arov1alpha1.InternetReachableFromWorker: corev1.ConditionTrue,
 }

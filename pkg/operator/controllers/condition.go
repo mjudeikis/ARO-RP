@@ -6,8 +6,8 @@ package controllers
 import (
 	"context"
 
-	"github.com/operator-framework/operator-sdk/pkg/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kubeclock "k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/client-go/util/retry"
 
 	"github.com/Azure/ARO-RP/pkg/operator"
@@ -16,14 +16,18 @@ import (
 	"github.com/Azure/ARO-RP/pkg/util/version"
 )
 
-func SetCondition(ctx context.Context, arocli aroclient.Interface, cond *status.Condition, role string) error {
+// clock is used to set status condition timestamps.
+// This variable makes it easier to test conditions.
+var clock kubeclock.Clock = &kubeclock.RealClock{}
+
+func SetCondition(ctx context.Context, arocli aroclient.Interface, cond *arov1alpha1.Condition, role string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		cluster, err := arocli.AroV1alpha1().Clusters().Get(ctx, arov1alpha1.SingletonClusterName, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
 
-		changed := cluster.Status.Conditions.SetCondition(*cond)
+		changed := setCondition(cluster.Status.Conditions, *cond)
 
 		if cleanStaleConditions(cluster, role) {
 			changed = true
@@ -41,10 +45,10 @@ func SetCondition(ctx context.Context, arocli aroclient.Interface, cond *status.
 // cleanStaleConditions ensures that conditions no longer in use as defined by older operators
 // are always removed from the cluster.status.conditions
 func cleanStaleConditions(cluster *arov1alpha1.Cluster, role string) (changed bool) {
-	conditions := make(status.Conditions, 0, len(cluster.Status.Conditions))
+	conditions := make([]arov1alpha1.Condition, 0, len(cluster.Status.Conditions))
 
 	// cleanup any old conditions
-	current := map[status.ConditionType]bool{}
+	current := map[arov1alpha1.ConditionType]bool{}
 	for _, ct := range arov1alpha1.AllConditionTypes() {
 		current[ct] = true
 	}
@@ -65,4 +69,26 @@ func cleanStaleConditions(cluster *arov1alpha1.Cluster, role string) (changed bo
 	}
 
 	return
+}
+
+// SetCondition adds (or updates) the set of conditions with the given
+// condition. It returns a boolean value indicating whether the set condition
+// is new or was a change to the existing condition with the same type.
+func setCondition(conditions []arov1alpha1.Condition, newCond arov1alpha1.Condition) bool {
+	newCond.LastTransitionTime = metav1.Time{Time: clock.Now()}
+
+	for i, condition := range conditions {
+		if condition.Type == newCond.Type {
+			if condition.Status == newCond.Status {
+				newCond.LastTransitionTime = condition.LastTransitionTime
+			}
+			changed := condition.Status != newCond.Status ||
+				condition.Reason != newCond.Reason ||
+				condition.Message != newCond.Message
+			(conditions)[i] = newCond
+			return changed
+		}
+	}
+	conditions = append(conditions, newCond)
+	return true
 }
