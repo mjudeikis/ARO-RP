@@ -17,10 +17,10 @@ import (
 	"github.com/Azure/ARO-RP/pkg/api/validate/dynamic"
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 	aroclient "github.com/Azure/ARO-RP/pkg/operator/clientset/versioned"
-	"github.com/Azure/ARO-RP/pkg/operator/controllers"
 	"github.com/Azure/ARO-RP/pkg/util/aad"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient"
 	"github.com/Azure/ARO-RP/pkg/util/clusterauthorizer"
+	"github.com/Azure/ARO-RP/pkg/util/conditions"
 )
 
 type ServicePrincipalChecker struct {
@@ -46,7 +46,7 @@ func (r *ServicePrincipalChecker) Name() string {
 }
 
 func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
-	cond := &arov1alpha1.Condition{
+	cond := &corev1.PodCondition{
 		Type:    arov1alpha1.ServicePrincipalValid,
 		Status:  corev1.ConditionTrue,
 		Message: "service principal is valid",
@@ -88,31 +88,10 @@ func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
 		updateFailedCondition(cond, err)
 	}
 
-	return controllers.SetCondition(ctx, r.arocli, cond, r.role)
+	return conditions.SetCondition(ctx, r.arocli, cond, r.role)
 }
 
-type credentials struct {
-	clientID     string
-	clientSecret string
-	tenantID     string
-}
-
-func azCredentials(ctx context.Context, kubernetescli kubernetes.Interface) (*credentials, error) {
-	var creds credentials
-
-	mysec, err := kubernetescli.CoreV1().Secrets(azureCredentialSecretNamespace).Get(ctx, azureCredentialSecretName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	creds.clientID = string(mysec.Data["azure_client_id"])
-	creds.clientSecret = string(mysec.Data["azure_client_secret"])
-	creds.tenantID = string(mysec.Data["azure_tenant_id"])
-
-	return &creds, nil
-}
-
-func updateFailedCondition(cond *arov1alpha1.Condition, err error) {
+func updateFailedCondition(cond *corev1.PodCondition, err error) {
 	cond.Status = corev1.ConditionFalse
 	if tErr, ok := err.(*api.CloudError); ok {
 		cond.Message = tErr.Message

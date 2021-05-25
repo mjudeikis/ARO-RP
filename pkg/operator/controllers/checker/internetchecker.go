@@ -17,7 +17,7 @@ import (
 	"github.com/Azure/ARO-RP/pkg/operator"
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 	aroclient "github.com/Azure/ARO-RP/pkg/operator/clientset/versioned"
-	"github.com/Azure/ARO-RP/pkg/operator/controllers"
+	"github.com/Azure/ARO-RP/pkg/util/conditions"
 )
 
 // InternetChecker reconciles a Cluster object
@@ -94,17 +94,17 @@ func (r *InternetChecker) Check(ctx context.Context) error {
 		}
 	}
 
-	var condition *arov1alpha1.Condition
+	var condition *corev1.PodCondition
 
 	if checkFailed {
-		condition = &arov1alpha1.Condition{
+		condition = &corev1.PodCondition{
 			Type:    r.conditionType(),
 			Status:  corev1.ConditionFalse,
 			Message: sb.String(),
 			Reason:  "CheckFailed",
 		}
 	} else {
-		condition = &arov1alpha1.Condition{
+		condition = &corev1.PodCondition{
 			Type:    r.conditionType(),
 			Status:  corev1.ConditionTrue,
 			Message: "Outgoing connection successful",
@@ -113,7 +113,7 @@ func (r *InternetChecker) Check(ctx context.Context) error {
 
 	}
 
-	err = controllers.SetCondition(ctx, r.arocli, condition, r.role)
+	err = conditions.SetCondition(ctx, r.arocli, condition, r.role)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (r *InternetChecker) checkOnce(client simpleHTTPClient, url string, timeout
 	return nil
 }
 
-func (r *InternetChecker) conditionType() (ctype arov1alpha1.ConditionType) {
+func (r *InternetChecker) conditionType() (ctype corev1.PodConditionType) {
 	switch r.role {
 	case operator.RoleMaster:
 		return arov1alpha1.InternetReachableFromMaster

@@ -62,7 +62,7 @@ func TestPullSecretReconciler(t *testing.T) {
 		request        ctrl.Request
 		fakecli        *fake.Clientset
 		arocli         *arofake.Clientset
-		wantConditions []arov1alpha1.Condition
+		wantConditions []corev1.PodCondition
 		wantKeys       []string
 		wantErr        bool
 		want           string

@@ -13,7 +13,7 @@ import (
 	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
 )
 
-var aroOperatorConditionsExpected = map[arov1alpha1.ConditionType]corev1.ConditionStatus{
+var aroOperatorConditionsExpected = map[corev1.PodConditionType]corev1.ConditionStatus{
 	arov1alpha1.InternetReachableFromMaster: corev1.ConditionTrue,
 	arov1alpha1.InternetReachableFromWorker: corev1.ConditionTrue,
 }
