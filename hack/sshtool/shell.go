@@ -27,7 +27,7 @@ func (s *sshTool) shell(ctx context.Context) error {
 	}
 	defer done()
 
-	fmt.Printf("ssh -A -p 2200 core@%s\n", s.oc.Properties.NetworkProfile.PrivateEndpointIP)
+	fmt.Printf("ssh -A -p 2200 core@%s\n", s.oc.Properties.NetworkProfile.APIServerPrivateEndpointIP)
 
 	c := &exec.Cmd{
 		Path: "/bin/bash",

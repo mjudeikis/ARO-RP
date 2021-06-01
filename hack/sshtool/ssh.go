@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/ARO-RP/pkg/metrics/noop"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/network"
 	"github.com/Azure/ARO-RP/pkg/util/encryption"
+	"github.com/Azure/ARO-RP/pkg/util/keyvault"
 	utillog "github.com/Azure/ARO-RP/pkg/util/log"
 	"github.com/Azure/ARO-RP/pkg/util/stringutils"
 )
@@ -25,6 +26,7 @@ import (
 type sshTool struct {
 	log *logrus.Entry
 	oc  *api.OpenShiftCluster
+	sub *api.Subscription
 
 	interfaces    network.InterfacesClient
 	loadBalancers network.LoadBalancersClient
@@ -33,13 +35,13 @@ type sshTool struct {
 	infraID              string
 }
 
-func newSSHTool(log *logrus.Entry, env env.Interface, oc *api.OpenShiftCluster) (*sshTool, error) {
+func newSSHTool(log *logrus.Entry, env env.Interface, oc *api.OpenShiftCluster, sub *api.Subscription) (*sshTool, error) {
 	r, err := azure.ParseResourceID(oc.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	fpAuthorizer, err := env.FPAuthorizer(oc.Properties.ServicePrincipalProfile.TenantID, azure.PublicCloud.ResourceManagerEndpoint)
+	fpAuthorizer, err := env.FPAuthorizer(sub.Properties.TenantID, azure.PublicCloud.ResourceManagerEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +54,10 @@ func newSSHTool(log *logrus.Entry, env env.Interface, oc *api.OpenShiftCluster) 
 	return &sshTool{
 		log: log,
 		oc:  oc,
+		sub: sub,
 
-		interfaces:    network.NewInterfacesClient(r.SubscriptionID, fpAuthorizer),
-		loadBalancers: network.NewLoadBalancersClient(r.SubscriptionID, fpAuthorizer),
+		interfaces:    network.NewInterfacesClient(env.Environment(), r.SubscriptionID, fpAuthorizer),
+		loadBalancers: network.NewLoadBalancersClient(env.Environment(), r.SubscriptionID, fpAuthorizer),
 
 		clusterResourceGroup: stringutils.LastTokenByte(oc.Properties.ClusterProfile.ResourceGroupID, '/'),
 		infraID:              infraID,
@@ -68,31 +71,71 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  %s shell resourceid\n", os.Args[0])
 }
 
-func getCluster(ctx context.Context, log *logrus.Entry, _env env.Core, resourceID string) (*api.OpenShiftCluster, error) {
-	cipher, err := encryption.NewXChaCha20Poly1305(ctx, _env, env.EncryptionSecretName)
+func getCluster(ctx context.Context, log *logrus.Entry, _env env.Core, resourceID string) (*api.OpenShiftCluster, *api.Subscription, error) {
+	msiAuthorizer, err := _env.NewMSIAuthorizer(env.MSIContextRP, _env.Environment().ResourceManagerEndpoint)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	db, err := database.NewDatabaseClient(ctx, log.WithField("component", "database"), _env, &noop.Noop{}, cipher)
+	msiKVAuthorizer, err := _env.NewMSIAuthorizer(env.MSIContextRP, _env.Environment().ResourceIdentifiers.KeyVault)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	dbOpenShiftClusters, err := database.NewOpenShiftClusters(ctx, _env.DeploymentMode(), db)
+	serviceKeyvaultURI, err := keyvault.URI(_env, env.ServiceKeyvaultSuffix)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	serviceKeyvault := keyvault.NewManager(msiKVAuthorizer, serviceKeyvaultURI)
+
+	key, err := serviceKeyvault.GetBase64Secret(ctx, env.EncryptionSecretName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	aead, err := encryption.NewXChaCha20Poly1305(ctx, key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dbAuthorizer, err := database.NewMasterKeyAuthorizer(ctx, _env, msiAuthorizer)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	db, err := database.NewDatabaseClient(log.WithField("component", "database"), _env, dbAuthorizer, &noop.Noop{}, aead)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dbOpenShiftClusters, err := database.NewOpenShiftClusters(ctx, _env.IsLocalDevelopmentMode(), db)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dbSubscriptions, err := database.NewSubscriptions(ctx, _env.IsLocalDevelopmentMode(), db)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	doc, err := dbOpenShiftClusters.Get(ctx, strings.ToLower(resourceID))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if doc == nil {
-		return nil, fmt.Errorf("resource %q not found", resourceID)
+		return nil, nil, fmt.Errorf("resource %q not found", resourceID)
 	}
 
-	return doc.OpenShiftCluster, nil
+	subDoc, err := dbSubscriptions.Get(ctx, strings.ToLower(resourceID))
+	if err != nil {
+		return nil, nil, err
+	}
+	if subDoc == nil {
+		return nil, nil, fmt.Errorf("resource %q not found", resourceID)
+	}
+
+	return doc.OpenShiftCluster, subDoc.Subscription, nil
 }
 
 func run(ctx context.Context, log *logrus.Entry) error {
@@ -106,12 +149,12 @@ func run(ctx context.Context, log *logrus.Entry) error {
 		return err
 	}
 
-	oc, err := getCluster(ctx, log, env, os.Args[2])
+	oc, sub, err := getCluster(ctx, log, env, os.Args[2])
 	if err != nil {
 		return err
 	}
 
-	s, err := newSSHTool(log, env, oc)
+	s, err := newSSHTool(log, env, oc, sub)
 	if err != nil {
 		return err
 	}

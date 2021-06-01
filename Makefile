@@ -109,8 +109,8 @@ tunnel:
 	go run ./hack/tunnel $(shell az network public-ip show -g ${RESOURCEGROUP} -n rp-pip --query 'ipAddress')
 
 sshtool:
-	go build ./hack/sshtool
-	docker build --format docker -t docker.io/mangirdas/sshtool:latest -f Dockerfile.sshtool .
+	CGO_ENABLED=0  go build -tags containers_image_openpgp ./hack/sshtool
+	docker build -t quay.io/mangirdas/sshtool:latest -f Dockerfile.sshtool .
 	docker push quay.io/mangirdas/sshtool:latest
 
 e2e.test:

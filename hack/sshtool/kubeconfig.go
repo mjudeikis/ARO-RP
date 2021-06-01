@@ -21,7 +21,7 @@ func (s *sshTool) kubeconfig() error {
 	}
 
 	for _, cluster := range config.Clusters {
-		cluster.Server = "https://" + s.oc.Properties.NetworkProfile.PrivateEndpointIP + ":6443"
+		cluster.Server = "https://" + s.oc.Properties.NetworkProfile.APIServerPrivateEndpointIP + ":6443"
 		cluster.CertificateAuthorityData = nil
 		cluster.InsecureSkipTLSVerify = true
 	}

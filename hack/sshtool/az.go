@@ -24,7 +24,12 @@ func expect(r io.Reader, expected []byte) error {
 	}
 
 	if !bytes.Equal(expected, b[:n]) {
-		return fmt.Errorf("expected %q, got %q", string(expected), string(b[:n]))
+		b := make([]byte, 256)
+		_, err := io.ReadAtLeast(r, b, len(b))
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("expected %q, got %q", string(expected), string(b))
 	}
 
 	return nil
@@ -33,7 +38,7 @@ func expect(r io.Reader, expected []byte) error {
 func (s *sshTool) az() error {
 	spp := s.oc.Properties.ServicePrincipalProfile
 
-	cmd := exec.Command("az", "login", "--service-principal", "-u", string(spp.ClientID), "-t", string(spp.TenantID))
+	cmd := exec.Command("az", "login", "--service-principal", "-u", string(spp.ClientID), "-t", string(s.sub.Properties.TenantID))
 
 	pty, err := pty.Start(cmd)
 	if err != nil {
