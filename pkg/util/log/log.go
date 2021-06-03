@@ -4,6 +4,7 @@ package log
 // Licensed under the Apache License 2.0.
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"path/filepath"
@@ -36,6 +37,8 @@ var (
 	RXTolerantResourceID = regexp.MustCompile(`(?i)^(?:/admin)?/subscriptions/([^/]+)(?:/resourceGroups/([^/]+)(?:/providers/([^/]+)/([^/]+)(?:/([^/]+))?)?)?`)
 
 	RXTolerantSubResourceID = regexp.MustCompile(`(?i)^(?:/admin)?/subscriptions/([^/]+)(?:/resourceGroups/([^/]+)(?:/providers/([^/]+)/([^/]+)/([^/]+)(?:/([^/]+))?)?)?`)
+
+	cachedLog *logrus.Entry
 )
 
 func getBaseLogger() *logrus.Logger {
@@ -80,7 +83,26 @@ func GetLogger() *logrus.Entry {
 		log.Warn(err)
 	}
 
+	cachedLog = log
+
 	return log
+}
+
+func Info(message string) error {
+	logger, err := GetCachedLogger()
+	if err != nil {
+		return err
+	}
+	logger.Info(message)
+	return nil
+}
+
+// GetCachedLogger returns last Entry created by GetLogger for convenient logging throughout codebase.
+func GetCachedLogger() (*logrus.Entry, error) {
+	if cachedLog == nil {
+		return nil, errors.New("no cached log entry, call GetLogger() before using this function")
+	}
+	return cachedLog, nil
 }
 
 // EnrichWithPath parses the URL path for part or all of an Azure resource ID
