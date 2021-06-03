@@ -16,6 +16,7 @@ import (
 	"github.com/form3tech-oss/jwt-go"
 
 	"github.com/Azure/ARO-RP/pkg/util/azureclaim"
+	utillog "github.com/Azure/ARO-RP/pkg/util/log"
 )
 
 type ServicePrincipalToken interface {
@@ -79,7 +80,53 @@ func (p *prod) populateTenantIDFromMSI(ctx context.Context) error {
 	return nil
 }
 
+// populateInstanceMetadataFromEnvironment attempts to populate instance metadata from environment, it does not throw errors.
+func (p *prod) populateInstanceMetadataFromEnvironment() bool {
+	environment := azure.PublicCloud
+	if value, found := os.LookupEnv("AZURE_ENVIRONMENT"); found {
+		var err error
+		environment, err = azure.EnvironmentFromName(value)
+		if err == nil {
+			p.environment = &environment
+		}
+	}
+
+	// Getenv returns empty string if not set which indicates no value for the struct
+	p.subscriptionID = os.Getenv("AZURE_SUBSCRIPTION_ID")
+	p.tenantID = os.Getenv("AZURE_TENANT_ID")
+	p.location = os.Getenv("LOCATION")
+	p.resourceGroup = os.Getenv("RESOURCEGROUP")
+
+	hostname, err := os.Hostname()
+	if err == nil {
+		p.hostname = hostname
+	}
+
+	return p.haveIntanceMetadata()
+}
+
+func (p *prod) haveIntanceMetadata() bool {
+	return p.environment != nil &&
+		p.subscriptionID != "" &&
+		p.tenantID != "" &&
+		p.location != "" &&
+		p.resourceGroup != "" &&
+		p.hostname != ""
+}
+
 func (p *prod) populateInstanceMetadata() error {
+	if p.populateInstanceMetadataFromEnvironment() {
+		// everything was populated from environment, can stop.
+		err := utillog.Info("created InstanceMetadata from Environment, not using http metadata endpoint")
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// didn't find in env vars, build form metadata
+	// note this doesn't work in ACI, used with Ev2
+
 	req, err := http.NewRequest(http.MethodGet, "http://169.254.169.254/metadata/instance/compute?api-version=2019-03-11", nil)
 	if err != nil {
 		return err

@@ -48,7 +48,7 @@ func NewCore(ctx context.Context, log *logrus.Entry) (Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("running on %s", im.Environment().Name)
+	log.Infof("InstanceMetadata: environment=%s subscriptionID=%s tenantID=%s location=%s resourceGroup=%s hostname=%s", im.Environment().Name, im.SubscriptionID(), im.TenantID(), im.Location(), im.ResourceGroup(), im.Hostname())
 
 	return &core{
 		InstanceMetadata: im,
