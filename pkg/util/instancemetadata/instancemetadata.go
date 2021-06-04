@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/sirupsen/logrus"
 )
 
 type InstanceMetadata interface {
@@ -51,10 +52,10 @@ func (im *instanceMetadata) Environment() *azure.Environment {
 	return im.environment
 }
 
-func New(ctx context.Context, isLocalDevelopmentMode bool) (InstanceMetadata, error) {
+func New(ctx context.Context, log *logrus.Entry, isLocalDevelopmentMode bool) (InstanceMetadata, error) {
 	if isLocalDevelopmentMode {
 		return NewDev(true)
 	}
 
-	return newProd(ctx)
+	return newProd(ctx, log)
 }

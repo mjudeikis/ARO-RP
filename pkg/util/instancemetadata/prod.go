@@ -14,9 +14,9 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/form3tech-oss/jwt-go"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Azure/ARO-RP/pkg/util/azureclaim"
-	utillog "github.com/Azure/ARO-RP/pkg/util/log"
 )
 
 type ServicePrincipalToken interface {
@@ -25,15 +25,17 @@ type ServicePrincipalToken interface {
 }
 
 type prod struct {
+	log *logrus.Entry
 	instanceMetadata
 
 	do                              func(*http.Request) (*http.Response, error)
 	newServicePrincipalTokenFromMSI func(string, string) (ServicePrincipalToken, error)
 }
 
-func newProd(ctx context.Context) (InstanceMetadata, error) {
+func newProd(ctx context.Context, log *logrus.Entry) (InstanceMetadata, error) {
 	p := &prod{
-		do: http.DefaultClient.Do,
+		log: log,
+		do:  http.DefaultClient.Do,
 		newServicePrincipalTokenFromMSI: func(msiEndpoint, resource string) (ServicePrincipalToken, error) {
 			return adal.NewServicePrincipalTokenFromMSI(msiEndpoint, resource)
 		},
@@ -115,13 +117,12 @@ func (p *prod) haveIntanceMetadata() bool {
 }
 
 func (p *prod) populateInstanceMetadata() error {
-	if p.populateInstanceMetadataFromEnvironment() {
-		// everything was populated from environment, can stop.
-		err := utillog.Info("created InstanceMetadata from Environment, not using http metadata endpoint")
-		if err != nil {
-			return err
+	if os.Getenv("AZURE_EV2") != "" {
+		if p.populateInstanceMetadataFromEnvironment() {
+			// everything was populated from environment, can stop.
+			p.log.Info("created InstanceMetadata from Environment, not using http metadata endpoint")
+			return nil
 		}
-		return nil
 	}
 
 	// didn't find in env vars, build form metadata
