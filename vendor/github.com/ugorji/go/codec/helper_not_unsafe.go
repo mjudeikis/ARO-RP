@@ -1,7 +1,8 @@
-// +build !go1.9 safe codec.safe appengine
-
 // Copyright (c) 2012-2020 Ugorji Nwoke. All rights reserved.
 // Use of this source code is governed by a MIT license found in the LICENSE file.
+
+//go:build !go1.9 || safe || codec.safe || appengine
+// +build !go1.9 safe codec.safe appengine
 
 package codec
 
@@ -17,7 +18,9 @@ import (
 // MARKER: See helper_unsafe.go for the usage documentation.
 
 const safeMode = true
-const decUseTransient = true
+
+const transientSizeMax = 0
+const transientValueHasStringSlice = true
 
 func stringView(v []byte) string {
 	return string(v)
@@ -31,13 +34,20 @@ func byteSliceSameData(v1 []byte, v2 []byte) bool {
 	return cap(v1) != 0 && cap(v2) != 0 && &(v1[:1][0]) == &(v2[:1][0])
 }
 
-// func (x *BasicHandle) fnloadFastpathUnderlying(ti *typeInfo) (f *fastpathE, u reflect.Type) {
-// 	return fnloadFastpathUnderlying(ti)
-// }
+func okBytes3(b []byte) (v [4]byte) {
+	copy(v[1:], b)
+	return
+}
 
-// func copyBytes(dst []byte, src []byte) {
-// 	copy(dst, src)
-// }
+func okBytes4(b []byte) (v [4]byte) {
+	copy(v[:], b)
+	return
+}
+
+func okBytes8(b []byte) (v [8]byte) {
+	copy(v[:], b)
+	return
+}
 
 func isNil(v interface{}) (rv reflect.Value, isnil bool) {
 	rv = reflect.ValueOf(v)
@@ -46,10 +56,6 @@ func isNil(v interface{}) (rv reflect.Value, isnil bool) {
 	}
 	return
 }
-
-// func rvAddr(rv reflect.Value) uintptr {
-// 	return rv.UnsafeAddr()
-// }
 
 func eq4i(i0, i1 interface{}) bool {
 	return i0 == i1
@@ -65,8 +71,8 @@ func rv2i(rv reflect.Value) interface{} {
 	return rv.Interface()
 }
 
-func rvType(rv reflect.Value) reflect.Type {
-	return rv.Type()
+func rvAddr(rv reflect.Value, ptrType reflect.Type) reflect.Value {
+	return rv.Addr()
 }
 
 func rvIsNil(rv reflect.Value) bool {
@@ -176,7 +182,7 @@ func isEmptyStruct(v reflect.Value, tinfos *TypeInfos, recursive bool) bool {
 	}
 	// We only care about what we can encode/decode,
 	// so that is what we use to check omitEmpty.
-	for _, si := range ti.sfiSrc {
+	for _, si := range ti.sfi.source() {
 		sfv := si.path.field(v)
 		if sfv.IsValid() && !isEmptyValue(sfv, tinfos, recursive) {
 			return false
@@ -188,8 +194,21 @@ func isEmptyStruct(v reflect.Value, tinfos *TypeInfos, recursive bool) bool {
 // --------------------------
 
 type perTypeElem struct {
-	rtid               uintptr
-	zero, addr1, addr2 reflect.Value
+	t    reflect.Type
+	rtid uintptr
+	zero reflect.Value
+	addr [2]reflect.Value
+}
+
+func (x *perTypeElem) get(index uint8) (v reflect.Value) {
+	v = x.addr[index%2]
+	if v.IsValid() {
+		v.Set(x.zero)
+	} else {
+		v = reflect.New(x.t).Elem()
+		x.addr[index%2] = v
+	}
+	return
 }
 
 type perType struct {
@@ -204,21 +223,8 @@ type encPerType struct {
 	perType
 }
 
-func newPerTypeElem(t reflect.Type, rtid uintptr) (v perTypeElem) {
-	v.rtid = rtid
-	v.zero = reflect.Zero(t)
-	v.addr1 = reflect.New(t).Elem()
-	v.addr2 = reflect.New(t).Elem()
-	return
-}
-
-func (x *perType) get(t reflect.Type, do2 bool) (v reflect.Value) {
-	const alwaysNew = false
-	if alwaysNew {
-		return reflect.New(t).Elem()
-	}
+func (x *perType) elem(t reflect.Type) *perTypeElem {
 	rtid := rt2id(t)
-	var e *perTypeElem
 	var h, i uint
 	var j = uint(len(x.v))
 LOOP:
@@ -235,39 +241,42 @@ LOOP:
 		if x.v[i].rtid != rtid {
 			x.v = append(x.v, perTypeElem{})
 			copy(x.v[i+1:], x.v[i:])
-			x.v[i] = newPerTypeElem(t, rtid)
+			x.v[i] = perTypeElem{t: t, rtid: rtid, zero: reflect.Zero(t)}
 		}
 	} else {
-		x.v = append(x.v, newPerTypeElem(t, rtid))
+		x.v = append(x.v, perTypeElem{t: t, rtid: rtid, zero: reflect.Zero(t)})
 	}
-	e = &x.v[i]
-	if do2 {
-		e.addr2.Set(e.zero)
-		return e.addr2
-	}
-	e.addr1.Set(e.zero)
-	return e.addr1
+	return &x.v[i]
 }
 
 func (x *perType) TransientAddrK(t reflect.Type, k reflect.Kind) (rv reflect.Value) {
-	return x.get(t, false)
+	return x.elem(t).get(0)
 }
 
 func (x *perType) TransientAddr2K(t reflect.Type, k reflect.Kind) (rv reflect.Value) {
-	return x.get(t, true)
+	return x.elem(t).get(1)
 }
 
 func (x *perType) AddressableRO(v reflect.Value) (rv reflect.Value) {
-	rv = x.get(v.Type(), false)
+	rv = x.elem(v.Type()).get(0)
 	rvSetDirect(rv, v)
 	return
 }
 
-func basicCheckCanTransient(ti *typeInfo) bool {
-	return true
+// --------------------------
+type structFieldInfos struct {
+	c []*structFieldInfo
+	s []*structFieldInfo
 }
 
-// --------------------------
+func (x *structFieldInfos) load(source, sorted []*structFieldInfo) {
+	x.c = source
+	x.s = sorted
+}
+
+func (x *structFieldInfos) sorted() (v []*structFieldInfo) { return x.s }
+func (x *structFieldInfos) source() (v []*structFieldInfo) { return x.c }
+
 type atomicClsErr struct {
 	v atomic.Value
 }
@@ -425,7 +434,11 @@ func rvSetDirectZero(rv reflect.Value) {
 	rv.Set(reflect.Zero(rv.Type()))
 }
 
-func rvSet(rv reflect.Value, v reflect.Value) {
+// func rvSet(rv reflect.Value, v reflect.Value) {
+// 	rv.Set(v)
+// }
+
+func rvSetIntf(rv reflect.Value, v reflect.Value) {
 	rv.Set(v)
 }
 
@@ -445,8 +458,8 @@ func rvMakeSlice(rv reflect.Value, ti *typeInfo, xlen, xcap int) (v reflect.Valu
 	return
 }
 
-func rvGrowSlice(rv reflect.Value, ti *typeInfo, xcap, incr int) (v reflect.Value, newcap int, set bool) {
-	newcap = int(growCap(uint(xcap), uint(ti.elemsize), uint(incr)))
+func rvGrowSlice(rv reflect.Value, ti *typeInfo, cap, incr int) (v reflect.Value, newcap int, set bool) {
+	newcap = int(growCap(uint(cap), uint(ti.elemsize), uint(incr)))
 	v = reflect.MakeSlice(ti.rt, newcap, newcap)
 	if rv.Len() > 0 {
 		reflect.Copy(v, rv)
@@ -606,12 +619,14 @@ func rvLenMap(rv reflect.Value) int {
 
 // ------------ map range and map indexing ----------
 
-func mapGet(m, k, v reflect.Value, keyFastKind mapKeyFastKind, valIsIndirect, valIsRef bool) (vv reflect.Value) {
-	return m.MapIndex(k)
+func mapStoresElemIndirect(elemsize uintptr) bool { return false }
+
+func mapSet(m, k, v reflect.Value, keyFastKind mapKeyFastKind, _, _ bool) {
+	m.SetMapIndex(k, v)
 }
 
-func mapSet(m, k, v reflect.Value, keyFastKind mapKeyFastKind, valIsIndirect, valIsRef bool) {
-	m.SetMapIndex(k, v)
+func mapGet(m, k, v reflect.Value, keyFastKind mapKeyFastKind, _, _ bool) (vv reflect.Value) {
+	return m.MapIndex(k)
 }
 
 // func mapDelete(m, k reflect.Value) {
@@ -653,44 +668,3 @@ func (n *structFieldInfoPathNode) rvField(v reflect.Value) reflect.Value {
 }
 
 // ---------- others ---------------
-
-/*
-func hashShortString(b []byte) (h uintptr) {
-	// MARKER: consider fnv - it may be a better hash than adler
-	return uintptr(adler32.Checksum(b))
-}
-
-// func hashShortString(b []byte) (h uint64) {
-// 	// culled from https://github.com/golang/go/issues/32779#issuecomment-735494578
-// 	// Read the string in two parts using wide-integer loads.
-// 	// The prefix and suffix may overlap, which is fine.
-// 	switch {
-// 	case len(b) > 8:
-// 		h ^= binary.LittleEndian.Uint64(b[:8])
-// 		h *= 0x00000100000001B3 // inspired by FNV-64
-// 		h ^= binary.LittleEndian.Uint64(b[len(b)-8:])
-// 	case len(b) > 4:
-// 		h ^= uint64(binary.LittleEndian.Uint32(b[:4]))
-// 		h *= 0x01000193 // inspired by FNV-32
-// 		h ^= uint64(binary.LittleEndian.Uint32(b[len(b)-4:]))
-// 	default:
-// 		h ^= uint64(binary.LittleEndian.Uint16(b[:2]))
-// 		h *= 0x010f // inspired by hypothetical FNV-16
-// 		h ^= uint64(binary.LittleEndian.Uint16(b[len(b)-2:]))
-// 	}
-//
-// 	// Collapse a 64-bit, 32-bit, or 16-bit hash into an 8-bit hash.
-// 	h ^= h >> 32
-// 	h ^= h >> 16
-// 	h ^= h >> 8
-//
-// 	// The cache has 8 buckets based on the lower 3-bits of the length.
-// 	h = ((h << 3) | uint64(len(b)&7))
-// 	return
-// }
-
-func rtsize(rt reflect.Type) uintptr {
-	return rt.Size()
-}
-
-*/

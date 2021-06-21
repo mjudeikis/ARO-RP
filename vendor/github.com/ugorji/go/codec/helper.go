@@ -141,6 +141,54 @@ package codec
 // ------------------------------------------
 // Passing reflect.Kind to functions that take a reflect.Value
 //   - Note that reflect.Value.Kind() is very cheap, as its fundamentally a binary AND of 2 numbers
+//
+// ------------------------------------------
+// Transient values during decoding
+//
+// With reflection, the stack is not used. Consequently, values which may be stack-allocated in
+// normal use will cause a heap allocation when using reflection.
+//
+// There are cases where we know that a value is transient, and we just need to decode into it
+// temporarily so we can right away use its value for something else.
+//
+// In these situations, we can elide the heap allocation by being deliberate with use of a pre-cached
+// scratch memory or scratch value.
+//
+// We use this for situations:
+// - decode into a temp value x, and then set x into an interface
+// - decode into a temp value, for use as a map key, to lookup up a map value
+// - decode into a temp value, for use as a map value, to set into a map
+// - decode into a temp value, for sending into a channel
+//
+// By definition, Transient values are NEVER pointer-shaped values,
+// like pointer, func, map, chan. Using transient for pointer-shaped values
+// can lead to data corruption when GC tries to follow what it saw as a pointer at one point.
+//
+// In general, transient values are values which can be decoded as an atomic value
+// using a single call to the decDriver. This naturally includes bool or numeric types.
+//
+// Note that some values which "contain" pointers, specifically string and slice,
+// can also be transient. In the case of string, it is decoded as an atomic value.
+// In the case of a slice, decoding into its elements always uses an addressable
+// value in memory ie we grow the slice, and then decode directly into the memory
+// address corresponding to that index in the slice.
+//
+// To handle these string and slice values, we have to use a scratch value
+// which has the same shape of a string or slice.
+//
+// Consequently, the full range of types which can be transient is:
+// - numbers
+// - bool
+// - string
+// - slice
+//
+// and whbut we MUST use a scratch space with that element
+// being defined as an unsafe.Pointer to start with.
+//
+// We have to be careful with maps. Because we iterate map keys and values during a range,
+// we must have 2 variants of the scratch space/value for maps and keys separately.
+//
+// These are the TransientAddrK and TransientAddr2K methods of decPerType.
 
 import (
 	"encoding"
@@ -209,17 +257,6 @@ const (
 	skipFastpathTypeSwitchInDirectCall = false
 )
 
-// keep in sync with
-//    $GOROOT/src/cmd/compile/internal/gc/reflect.go: MAXKEYSIZE, MAXELEMSIZE
-//    $GOROOT/src/runtime/map.go: maxKeySize, maxElemSize
-//    $GOROOT/src/reflect/type.go: maxKeySize, maxElemSize
-//
-// We use these to determine whether the type is stored indirectly in the map or not.
-const (
-	mapMaxKeySize  = 128
-	mapMaxElemSize = 128
-)
-
 const cpu32Bit = ^uint(0)>>32 == 0
 
 type rkind byte
@@ -257,6 +294,9 @@ var (
 	// numCharWithExpBitset64 bitset64
 	// numCharNoExpBitset64   bitset64
 	// whitespaceCharBitset64 bitset64
+	//
+	// // hasptrBitset sets bit for all kinds which always have internal pointers
+	// hasptrBitset bitset32
 
 	// refBitset sets bit for all kinds which are direct internal references
 	refBitset bitset32
@@ -264,8 +304,11 @@ var (
 	// isnilBitset sets bit for all kinds which can be compared to nil
 	isnilBitset bitset32
 
-	// hasptrBitset sets bit for all kinds which always have internal pointers
-	hasptrBitset bitset32
+	// numBoolBitset sets bit for all number and bool kinds
+	numBoolBitset bitset32
+
+	// numBoolStrSliceBitset sets bits for all kinds which are numbers, bool, strings and slices
+	numBoolStrSliceBitset bitset32
 
 	// scalarBitset sets bit for all kinds which are scalars/primitives and thus immutable
 	scalarBitset bitset32
@@ -332,7 +375,7 @@ func init() {
 	xx(mapKeyFastKind32, reflect.Uint32, reflect.Int32, reflect.Float32)
 	xx(mapKeyFastKind64, reflect.Uint64, reflect.Int64, reflect.Float64)
 
-	scalarBitset.
+	numBoolBitset.
 		set(byte(reflect.Bool)).
 		set(byte(reflect.Int)).
 		set(byte(reflect.Int8)).
@@ -348,13 +391,20 @@ func init() {
 		set(byte(reflect.Float32)).
 		set(byte(reflect.Float64)).
 		set(byte(reflect.Complex64)).
-		set(byte(reflect.Complex128)).
+		set(byte(reflect.Complex128))
+
+	numBoolStrSliceBitset = numBoolBitset
+
+	numBoolStrSliceBitset.
+		set(byte(reflect.String)).
+		set(byte(reflect.Slice))
+
+	scalarBitset = numBoolBitset
+
+	scalarBitset.
 		set(byte(reflect.String))
 
 	// MARKER: reflect.Array is not a scalar, as its contents can be modified.
-	//
-	// Also, reflect.Array cannot be transient, as it might be non-addressable,
-	// meaning all the elements are non-addressable, and thus could re-use the transient buffer.
 
 	refBitset.
 		set(byte(reflect.Map)).
@@ -369,10 +419,10 @@ func init() {
 		set(byte(reflect.Interface)).
 		set(byte(reflect.Slice))
 
-	hasptrBitset = isnilBitset
-
-	hasptrBitset.
-		set(byte(reflect.String))
+	// hasptrBitset = isnilBitset
+	//
+	// hasptrBitset.
+	// 	set(byte(reflect.String))
 
 	for i := byte(0); i <= utf8.RuneSelf; i++ {
 		if (i >= '0' && i <= '9') || (i >= 'a' && i <= 'z') || (i >= 'A' && i <= 'Z') {
@@ -381,19 +431,13 @@ func init() {
 		switch i {
 		case ' ', '\t', '\r', '\n':
 			whitespaceCharBitset.set(i)
-			// whitespaceCharBitset64.set(i)
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			digitCharBitset.set(i)
 			numCharBitset.set(i)
-			// numCharWithExpBitset64.set(i - 42)
-			// numCharNoExpBitset64.set(i)
 		case '.', '+', '-':
 			numCharBitset.set(i)
-			// numCharWithExpBitset64.set(i - 42)
-			// numCharNoExpBitset64.set(i)
 		case 'e', 'E':
 			numCharBitset.set(i)
-			// numCharWithExpBitset64.set(i - 42)
 		}
 	}
 }
@@ -479,16 +523,6 @@ func (x valueType) String() string {
 	}
 	return strconv.FormatInt(int64(x), 10)
 }
-
-// seqType is no longer used, as we now use dedicated methods for decoding slice vs chan vs array
-// type seqType uint8
-
-// const (
-// 	_ seqType = iota
-// 	seqTypeArray
-// 	seqTypeSlice
-// 	// seqTypeChan
-// )
 
 // note that containerMapStart and containerArraySend are not sent.
 // This is because the ReadXXXStart and EncodeXXXStart already does these.
@@ -848,8 +882,10 @@ type BasicHandle struct {
 // e.g. extensions, registered interfaces, TimeNotBuiltIn, etc
 func initHandle(hh Handle) {
 	x := hh.getBasicHandle()
-	// ** We need to simulate once.Do, to ensure no data race within the block.
-	// ** Consequently, below would not work.
+
+	// MARKER: We need to simulate once.Do, to ensure no data race within the block.
+	// Consequently, below would not work.
+	//
 	// if atomic.CompareAndSwapUint32(&x.inited, 0, 1) {
 	// 	x.be = hh.isBinary()
 	// 	x.js = hh.isJson
@@ -909,7 +945,7 @@ func (x *basicHandleRuntimeState) setExt(rt reflect.Type, tag uint64, ext Ext) (
 	rtid := rt2id(rt)
 	switch rtid {
 	case timeTypId, rawTypId, rawExtTypId:
-		// all natively supported type, so cannot have an extension.
+		// these are all natively supported type, so they cannot have an extension.
 		// However, we do not return an error for these, as we do not document that.
 		// Instead, we silently treat as a no-op, and return.
 		return
@@ -1057,7 +1093,7 @@ func (x *basicHandleRuntimeState) fnLoad(rt reflect.Type, rtid uintptr, tinfos *
 	// it implementes one of the pre-declared interfaces.
 
 	fi.addrDf = true
-	fi.addrEf = true
+	// fi.addrEf = true
 
 	if rtid == timeTypId && x.timeBuiltin {
 		fn.fe = (*Encoder).kTime
@@ -1121,7 +1157,7 @@ func (x *basicHandleRuntimeState) fnLoad(rt reflect.Type, rtid uintptr, tinfos *
 			// Consequently, the value of doing this quick allocation to elide the overhead cost of
 			// non-optimized (not-unsafe) reflection is a fair price.
 			var rtid2 uintptr
-			if ti.pkgpath == "" { // un-named type (slice or mpa or array)
+			if !ti.flagHasPkgPath { // un-named type (slice or mpa or array)
 				rtid2 = rtid
 				if rk == reflect.Array {
 					rtid2 = rt2id(ti.key) // ti.key for arrays = reflect.SliceOf(ti.elem)
@@ -1228,17 +1264,13 @@ func (x *basicHandleRuntimeState) fnLoad(rt reflect.Type, rtid uintptr, tinfos *
 				fn.fe = (*Encoder).kComplex128
 				fn.fd = (*Decoder).kComplex128
 			case reflect.Chan:
-				// fi.seq = seqTypeChan
 				fn.fe = (*Encoder).kChan
 				fn.fd = (*Decoder).kChan
 			case reflect.Slice:
-				// fi.seq = seqTypeSlice
 				fn.fe = (*Encoder).kSlice
 				fn.fd = (*Decoder).kSlice
 			case reflect.Array:
-				// fi.seq = seqTypeArray
 				fi.addrD = false // decode directly into array value (slice made from it)
-
 				fn.fe = (*Encoder).kArray
 				fn.fd = (*Decoder).kArray
 			case reflect.Struct:
@@ -1769,6 +1801,26 @@ func (p sfiSortedByEncName) Len() int           { return len(p) }
 func (p sfiSortedByEncName) Swap(i, j int)      { p[uint(i)], p[uint(j)] = p[uint(j)], p[uint(i)] }
 func (p sfiSortedByEncName) Less(i, j int) bool { return p[uint(i)].encName < p[uint(j)].encName }
 
+// typeInfo4Container holds information that is only available for
+// containers like map, array, chan, slice.
+type typeInfo4Container struct {
+	elem reflect.Type
+	// key is:
+	//   - if map kind: map key
+	//   - if array kind: sliceOf(elem)
+	//   - if chan kind: sliceof(elem)
+	key reflect.Type
+
+	// fastpathUnderlying is underlying type of a named slice/map/array, as defined by go spec,
+	// that is used by fastpath where we defined fastpath functions for the underlying type.
+	//
+	// for a map, it's a map; for a slice or array, it's a slice; else its nil.
+	fastpathUnderlying reflect.Type
+
+	tikey  *typeInfo
+	tielem *typeInfo
+}
+
 // typeInfo keeps static (non-changing readonly)information
 // about each (non-ptr) type referenced in the encode/decode sequence.
 //
@@ -1779,9 +1831,10 @@ func (p sfiSortedByEncName) Less(i, j int) bool { return p[uint(i)].encName < p[
 //   - If type is text(M/Unm)arshaler, call Text(M/Unm)arshal method
 //   - Else decode appropriately based on the reflect.Kind
 type typeInfo struct {
-	rt      reflect.Type
-	elem    reflect.Type
-	pkgpath string
+	rt  reflect.Type
+	ptr reflect.Type
+
+	// pkgpath string
 
 	rtid uintptr
 
@@ -1794,37 +1847,17 @@ type typeInfo struct {
 	keyType      valueType // if struct, how is the field name stored in a stream? default is string
 	mbs          bool      // base type (T or *T) is a MapBySlice
 
-	// ---- cpu cache line boundary?
-
-	sfiSort []*structFieldInfo // sorted. Used when enc/dec struct to map.
-	sfiSrc  []*structFieldInfo // unsorted. Used when enc/dec struct to array.
-
-	// key is:
-	//   - if map kind: map key
-	//   - if array kind: sliceOf(elem)
-	//   - if chan kind: sliceof(elem)
-	key reflect.Type
-
-	// ---- cpu cache line boundary?
-
-	// fastpathUnderlying is underlying type of a named slice/map/array, as defined by go spec,
-	// that is used by fastpath where we defined fastpath functions for the underlying type.
-	//
-	// for a map, it's a map; for a slice or array, it's a slice; else its nil.
-	fastpathUnderlying reflect.Type
-
-	// sfiSrch  []*structFieldInfo          // sorted. used for finding sfi given a name
 	sfi4Name map[string]*structFieldInfo // map. used for finding sfi given a name
 
-	// ---- cpu cache line boundary?
+	*typeInfo4Container
 
-	tikey  *typeInfo
-	tielem *typeInfo
+	// ---- cpu cache line boundary?
 
 	size, keysize, elemsize uint32
 
 	keykind, elemkind uint8
 
+	flagHasPkgPath   bool // Type.PackagePath != ""
 	flagCustom       bool // does this have custom implementation?
 	flagComparable   bool
 	flagCanTransient bool
@@ -1863,6 +1896,8 @@ type typeInfo struct {
 	flagMissingFielderPtr bool
 
 	infoFieldOmitempty bool
+
+	sfi structFieldInfos
 }
 
 func (ti *typeInfo) siForEncName(name []byte) (si *structFieldInfo) {
@@ -1900,9 +1935,6 @@ func (ti *typeInfo) init(x []structFieldInfo, n int) {
 	// remove all the nils (non-ready)
 	m := make(map[string]*structFieldInfo, n)
 	w := make([]structFieldInfo, n)
-	// y := make([]*structFieldInfo, n+n+n)
-	// b := y[n+n:]
-	// z := y[n:]
 	y := make([]*structFieldInfo, n+n)
 	z := y[n:]
 	y = y[:n]
@@ -1926,14 +1958,63 @@ func (ti *typeInfo) init(x []structFieldInfo, n int) {
 	copy(z, y)
 	sort.Sort(sfiSortedByEncName(z))
 
-	// copy(b, y)
-	// sort.Sort(sfiSortedForBinarySearch(b))
-
 	ti.anyOmitEmpty = anyOmitEmpty
-	ti.sfiSrc = y
-	ti.sfiSort = z
-	// ti.sfiSrch = b
+	ti.sfi.load(y, z)
 	ti.sfi4Name = m
+}
+
+// Handling flagCanTransient
+//
+// We support transient optimization if the kind of the type is
+// a number, bool, string, or slice.
+// In addition, we also support if the kind is struct or array,
+// and the type does not contain any pointers recursively).
+//
+// Noteworthy that all reference types (string, slice, func, map, ptr, interface, etc) have pointers.
+//
+// If using transient for a type with a pointer, there is the potential for data corruption
+// when GC tries to follow a "transient" pointer which may become a non-pointer soon after.
+//
+
+func isCanTransient(t reflect.Type, k reflect.Kind) (v bool) {
+	var bs *bitset32
+	if transientValueHasStringSlice {
+		bs = &numBoolStrSliceBitset
+	} else {
+		bs = &numBoolBitset
+	}
+	if bs.isset(byte(k)) {
+		v = true
+	} else if k == reflect.Array {
+		elem := t.Elem()
+		v = isCanTransient(elem, elem.Kind())
+	} else if k == reflect.Struct {
+		v = true
+		for j, jlen := 0, t.NumField(); j < jlen; j++ {
+			f := t.Field(j)
+			if !isCanTransient(f.Type, f.Type.Kind()) {
+				v = false
+				return
+			}
+		}
+	} else {
+		v = false
+	}
+	return
+}
+
+func (ti *typeInfo) doSetFlagCanTransient() {
+	if transientSizeMax > 0 {
+		ti.flagCanTransient = ti.size <= transientSizeMax
+	} else {
+		ti.flagCanTransient = true
+	}
+	if ti.flagCanTransient {
+		// if ti kind is a num, bool, string or slice, then it is flagCanTransient
+		if !numBoolStrSliceBitset.isset(ti.kind) {
+			ti.flagCanTransient = isCanTransient(ti.rt, reflect.Kind(ti.kind))
+		}
+	}
 }
 
 type rtid2ti struct {
@@ -2023,12 +2104,15 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 	// it may lead to duplication, but that's ok.
 	ti := typeInfo{
 		rt:      rt,
+		ptr:     reflect.PtrTo(rt),
 		rtid:    rtid,
 		kind:    uint8(rk),
 		size:    uint32(rt.Size()),
 		numMeth: uint16(rt.NumMethod()),
-		pkgpath: rt.PkgPath(),
 		keyType: valueTypeString, // default it - so it's never 0
+
+		// pkgpath: rt.PkgPath(),
+		flagHasPkgPath: rt.PkgPath() != "",
 	}
 
 	// bset sets custom implementation flags
@@ -2079,18 +2163,7 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 	// bset(b1, &ti.flagComparable)
 	ti.flagComparable = b1
 
-	// flagCanTransient MUST be false for anything with a pointer in it.
-	// All reference types (string, slice, func, map, ptr, interface, etc) have pointers.
-	// 
-	// If using transient for a type with a pointer, there is the potential for data corruption
-	//  when GC tries to follow a "transient" pointer which may become a non-pointer soon after.
-	//
-	// struct and array can have flagCanTransient=true iff there are no internal references.
-
-	ti.flagCanTransient = basicCheckCanTransient(&ti)
-	if ti.flagCanTransient {
-		ti.flagCanTransient = !hasptrBitset.isset(byte(rk))
-	}
+	ti.doSetFlagCanTransient()
 
 	var tt reflect.Type
 	switch rk {
@@ -2106,12 +2179,12 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 		pv := pi.(*typeInfoLoad)
 		pv.reset()
 		pv.etypes = append(pv.etypes, ti.rtid)
-		// rget will set the value of flagCanTransient appropriately
-		x.rget(rt, rtid, &ti, nil, pv, omitEmpty)
+		x.rget(rt, rtid, nil, pv, omitEmpty)
 		n := ti.resolve(pv.sfis, pv.sfiNames)
 		ti.init(pv.sfis, n)
 		pp.Put(pi)
 	case reflect.Map:
+		ti.typeInfo4Container = new(typeInfo4Container)
 		ti.elem = rt.Elem()
 		for tt = ti.elem; tt.Kind() == reflect.Ptr; tt = tt.Elem() {
 		}
@@ -2124,10 +2197,11 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 		ti.tikey = x.get(rt2id(tt), tt)
 		ti.keykind = uint8(ti.key.Kind())
 		ti.keysize = uint32(ti.key.Size())
-		if ti.pkgpath != "" {
+		if ti.flagHasPkgPath {
 			ti.fastpathUnderlying = reflect.MapOf(ti.key, ti.elem)
 		}
 	case reflect.Slice:
+		ti.typeInfo4Container = new(typeInfo4Container)
 		ti.mbs, b2 = implIntf(rt, mapBySliceTyp)
 		if !ti.mbs && b2 {
 			ti.mbs = b2
@@ -2138,10 +2212,11 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 		ti.tielem = x.get(rt2id(tt), tt)
 		ti.elemkind = uint8(ti.elem.Kind())
 		ti.elemsize = uint32(ti.elem.Size())
-		if ti.pkgpath != "" {
+		if ti.flagHasPkgPath {
 			ti.fastpathUnderlying = reflect.SliceOf(ti.elem)
 		}
 	case reflect.Chan:
+		ti.typeInfo4Container = new(typeInfo4Container)
 		ti.elem = rt.Elem()
 		for tt = ti.elem; tt.Kind() == reflect.Ptr; tt = tt.Elem() {
 		}
@@ -2152,6 +2227,7 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 		ti.key = reflect.SliceOf(ti.elem)
 		ti.keykind = uint8(reflect.Slice)
 	case reflect.Array:
+		ti.typeInfo4Container = new(typeInfo4Container)
 		ti.mbs, b2 = implIntf(rt, mapBySliceTyp)
 		if !ti.mbs && b2 {
 			ti.mbs = b2
@@ -2159,19 +2235,13 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 		ti.elem = rt.Elem()
 		ti.elemkind = uint8(ti.elem.Kind())
 		ti.elemsize = uint32(ti.elem.Size())
-		if ti.flagCanTransient {
-			ti.flagCanTransient = !hasptrBitset.isset(ti.elemkind)
-			if ti.flagCanTransient {
-				ti.flagCanTransient = x.get(rt2id(ti.elem), ti.elem).flagCanTransient
-			}
-		}
 		for tt = ti.elem; tt.Kind() == reflect.Ptr; tt = tt.Elem() {
 		}
 		ti.tielem = x.get(rt2id(tt), tt)
 		ti.key = reflect.SliceOf(ti.elem)
 		ti.keykind = uint8(reflect.Slice)
 		ti.keysize = uint32(ti.key.Size())
-		if ti.pkgpath != "" {
+		if ti.flagHasPkgPath {
 			ti.fastpathUnderlying = ti.key
 		}
 
@@ -2206,7 +2276,7 @@ func (x *TypeInfos) load(rt reflect.Type) (pti *typeInfo) {
 	return
 }
 
-func (x *TypeInfos) rget(rt reflect.Type, rtid uintptr, ti *typeInfo,
+func (x *TypeInfos) rget(rt reflect.Type, rtid uintptr,
 	path *structFieldInfoPathNode, pv *typeInfoLoad, omitEmpty bool) {
 	// Read up fields and store how to access the value.
 	//
@@ -2221,16 +2291,6 @@ LOOP:
 	for j, jlen := uint16(0), uint16(flen); j < jlen; j++ {
 		f := rt.Field(int(j))
 		fkind := f.Type.Kind()
-
-		if ti != nil && ti.flagCanTransient {
-			ti.flagCanTransient = !hasptrBitset.isset(byte(fkind))
-			if ti.flagCanTransient {
-				switch fkind { // check if array or struct and handle accordingly
-				case reflect.Struct, reflect.Array:
-					ti.flagCanTransient = x.get(rt2id(f.Type), f.Type).flagCanTransient
-				}
-			}
-		}
 
 		// skip if a func type, or is unexported, or structTag value == "-"
 		switch fkind {
@@ -2306,7 +2366,7 @@ LOOP:
 						kind:     uint8(fkind),
 						numderef: numderef,
 					}
-					x.rget(ft, ftid, nil, path2, pv, omitEmpty)
+					x.rget(ft, ftid, path2, pv, omitEmpty)
 				}
 				continue
 			}
@@ -2338,15 +2398,12 @@ LOOP:
 			si.encName = f.Name
 		}
 
-		// si.encNameHash = maxUintptr()
-		// si.encNameHash = hashShortString(bytesView(si.encName))
+		// si.encNameHash = maxUintptr() // hashShortString(bytesView(si.encName))
 
 		if omitEmpty {
 			si.path.omitEmpty = true
 		}
 
-		// si.fieldName = f.Name
-		// si.path.encNameAsciiAlphaNum = true
 		for i := len(si.encName) - 1; i >= 0; i-- { // bounds-check elimination
 			if !asciiAlphaNumBitset.isset(si.encName[i]) {
 				si.path.encNameAsciiAlphaNum = false
@@ -2382,6 +2439,10 @@ func isSliceBoundsError(s string) bool {
 		strings.Contains(s, "slice bounds out of range")
 }
 
+func sprintf(format string, v ...interface{}) string {
+	return fmt.Sprintf(format, v...)
+}
+
 func panicValToErr(h errDecorator, v interface{}, err *error) {
 	if v == *err {
 		return
@@ -2410,10 +2471,6 @@ func panicValToErr(h errDecorator, v interface{}, err *error) {
 	}
 }
 
-// func isImmutableKind(k reflect.Kind) (v bool) {
-// 	return scalarBitset.isset(byte(k))
-// }
-
 func usableByteSlice(bs []byte, slen int) (out []byte, changed bool) {
 	if slen <= 0 {
 		return []byte{}, true
@@ -2426,20 +2483,18 @@ func usableByteSlice(bs []byte, slen int) (out []byte, changed bool) {
 
 func mapKeyFastKindFor(k reflect.Kind) mapKeyFastKind {
 	return mapKeyFastKindVals[k&31]
-	// return mapKeyFastKindVals[int(k)%len(mapKeyFastKindVals)]
 }
 
 // ----
 
 type codecFnInfo struct {
-	ti    *typeInfo
-	xfFn  Ext
-	xfTag uint64
-	// seq    seqType
+	ti     *typeInfo
+	xfFn   Ext
+	xfTag  uint64
 	addrD  bool
 	addrDf bool // force: if addrD, then decode function MUST take a ptr
 	addrE  bool
-	addrEf bool // force: if addrE, then encode function MUST take a ptr
+	// addrEf bool // force: if addrE, then encode function MUST take a ptr
 }
 
 // codecFn encapsulates the captured variables and the encode function.
@@ -2450,7 +2505,7 @@ type codecFn struct {
 	i  codecFnInfo
 	fe func(*Encoder, *codecFnInfo, reflect.Value)
 	fd func(*Decoder, *codecFnInfo, reflect.Value)
-	_  [1]uint64 // padding (cache-aligned)
+	// _  [1]uint64 // padding (cache-aligned)
 }
 
 type codecRtidFn struct {
@@ -2459,12 +2514,7 @@ type codecRtidFn struct {
 }
 
 func makeExt(ext interface{}) Ext {
-	// if ext == nil {
-	// 	return &extFailWrapper{}
-	// }
 	switch t := ext.(type) {
-	// case nil:
-	// 	return &extFailWrapper{}
 	case Ext:
 		return t
 	case BytesExt:
@@ -2577,21 +2627,11 @@ func isNumberChar(v byte) bool {
 	// return v > 42 && v < 102 && numCharWithExpBitset64.isset(v-42)
 }
 
-// func isDigitChar(v byte) bool {
-// 	// these are in order of speed below ...
-// 	return digitCharBitset.isset(v)
-// 	// return v >= '0' && v <= '9'
-// }
-
 // -----------------------
 
 type ioFlusher interface {
 	Flush() error
 }
-
-// type ioPeeker interface {
-// 	Peek(int) ([]byte, error)
-// }
 
 type ioBuffered interface {
 	Buffered() int
@@ -2636,16 +2676,6 @@ func (x *bitset32) isset(pos byte) bool {
 	return x[pos&31] // x[pos%32]
 }
 
-// type bitset64 [64]bool
-
-// func (x *bitset64) set(pos byte) *bitset64 {
-// 	x[pos%64] = true
-// 	return x
-// }
-// func (x *bitset64) isset(pos byte) bool {
-// 	return x[pos%64]
-// }
-
 type bitset256 [256]bool
 
 func (x *bitset256) set(pos byte) *bitset256 {
@@ -2655,41 +2685,6 @@ func (x *bitset256) set(pos byte) *bitset256 {
 func (x *bitset256) isset(pos byte) bool {
 	return x[pos]
 }
-
-// ----
-// type bitset32 uint32
-
-// func (x *bitset32) set(pos byte) *bitset32 {
-// 	*x = *x | (1 << pos)
-// 	return x
-// }
-// func (x bitset32) isset(pos byte) bool {
-// 	return uint32(x)&(1<<pos) != 0
-// }
-
-// type bitset64 uint64
-
-// func (x *bitset64) set(pos byte) *bitset64 {
-// 	*x = *x | (1 << pos)
-// 	return x
-// }
-// func (x bitset64) isset(pos byte) bool {
-// 	return uint64(x)&(1<<pos) != 0
-// }
-
-// type bitset256 [32]byte
-
-// func (x *bitset256) set(pos byte) *bitset256 {
-// 	x[pos>>3] |= (1 << (pos & 7))
-// 	return x
-// }
-// func (x *bitset256) check(pos byte) uint8 {
-// 	return x[pos>>3] & (1 << (pos & 7))
-// }
-// func (x *bitset256) isset(pos byte) bool {
-// 	return x.check(pos) != 0
-// 	// return x[pos>>3]&(1<<(pos&7)) != 0
-// }
 
 // ------------
 
@@ -2975,150 +2970,3 @@ func (x internerMap) string(v []byte) (s string) {
 	}
 	return
 }
-
-/*
-type internerHash struct {
-	v *[internCap]string
-}
-
-func (x *internerHash) init() {
-	var v [internCap]string
-	x.v = &v
-}
-
-func (x *internerHash) string(v []byte) (s string) {
-	h := hashShortString(v) % internCap
-	s = x.v[h]
-	if s != string(v) {
-		s = string(v)
-		x.v[h] = s
-	}
-	return
-}
-
-type internerLinearSearch struct {
-	v *[internCap]string
-}
-
-func (x *internerLinearSearch) init() {
-	var v [internCap]string
-	x.v = &v
-}
-
-func (x *internerLinearSearch) string(v []byte) (s string) {
-	// MARKER: should we move to front, given that we typically might see the field names in sequence?
-	// if most values are encoded in sequence based on field names, then moving is busy work.
-	// Howeer, if most values are accessed randomly, then moving has advantages.
-	const moveToFront = true
-	var i int
-	for i, s = range x.v {
-		if s == "" {
-			s = string(v)
-			x.v[i] = s
-			goto END
-		}
-		if s == string(v) {
-			goto END
-		}
-	}
-	s = string(v)
-END:
-	if moveToFront && i > 0 {
-		copy(x.v[1:], x.v[:i])
-		x.v[0] = s
-	}
-	return s
-}
-*/
-
-/*
-
-// binary search for string is expensive, as it has to compare strings byte by byte.
-// Even when we include len, and hashCode, during sorting, and then do a binary search,
-// as done below, we saw via testing anecdotally
-// that map (hash) lookup is faster, as it can leverage string length in disambiguation.
-//
-// When evaluating current siForEncName using a map, vs siForEncNameB below,
-// decode speed was about 3% faster using maps.
-//
-// This might be because of better inlining using map syntax, or otherwise.
-// Either way, siForEncNameB is not inlined, and runtime.memhash is not inlined either,
-// so there may be some overhead using siForEnaNameB below.
-// Either way, we will comment all out the code for binarysearch method, but leave in-place
-// in case things change later.
-
-func (ti *typeInfo) siForEncNameB(name []byte) (si *structFieldInfo) {
-	s := ti.sfiSrch
-	// - cutoff = keyLen < 16 ? 8 : 4
-	// - arraylen < cutoff ? linearSearch : binarySearch
-	cutoff := 4
-	if len(name) <= 16 {
-		cutoff = 8
-	}
-	if len(s) < cutoff {
-		// do linear search
-		for _, si = range s {
-			if si.encName == string(name) {
-				return
-			}
-		}
-		return nil
-	}
-
-	var i, h uint
-	var j = uint(len(s))
-	hash := hashShortString(name)
-LOOP:
-	if i < j {
-		h = (i + j) >> 1 // avoid overflow when computing h // h = i + (j-i)/2
-		if s[h].searchLessThan2(name, hash) {
-			i = h + 1
-		} else {
-			j = h
-		}
-		goto LOOP
-	}
-	if i < uint(len(s)) && s[i].encName == string(name) {
-		si = s[i]
-	}
-	return
-}
-
-func (si *structFieldInfo) searchLessThan(name string, hash uintptr) bool {
-	// MARKER: consider comment'ing out len checks, so there's at most 2 checks
-	if len(si.encName) != len(name) {
-		return len(si.encName) < len(name)
-	}
-	if si.encNameHash != hash {
-		return si.encNameHash < hash
-	}
-	return si.encName < name
-}
-
-func (si *structFieldInfo) searchLessThan2(name []byte, hash uintptr) bool {
-	// MARKER: consider comment'ing out len checks, so there's at most 2 checks
-	if len(si.encName) != len(name) {
-		return len(si.encName) < len(name)
-	}
-	if si.encNameHash != hash {
-		return si.encNameHash < hash
-	}
-	return si.encName < string(name)
-}
-
-type sfiSortedForBinarySearch []*structFieldInfo
-
-func (p sfiSortedForBinarySearch) Len() int      { return len(p) }
-func (p sfiSortedForBinarySearch) Swap(i, j int) { p[uint(i)], p[uint(j)] = p[uint(j)], p[uint(i)] }
-func (p sfiSortedForBinarySearch) Less(i, j int) bool {
-	return p[uint(i)].searchLessThan(p[uint(j)].encName, p[uint(j)].encNameHash)
-}
-
-func maxUintptr() uintptr {
-	if cpu32Bit {
-		return uintptr(math.MaxUint32)
-	}
-	return uintptr(math.MaxUint64)
-}
-
-*/
