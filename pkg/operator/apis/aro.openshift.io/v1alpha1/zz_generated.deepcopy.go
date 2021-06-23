@@ -5,7 +5,7 @@
 package v1alpha1
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "github.com/openshift/api/operator/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -91,7 +91,7 @@ func (in *ClusterStatus) DeepCopyInto(out *ClusterStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.PodCondition, len(*in))
+		*out = make([]v1.OperatorCondition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

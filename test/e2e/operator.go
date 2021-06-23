@@ -262,7 +262,6 @@ var _ = Describe("ARO Operator - Conditions", func() {
 
 			valid := true
 			for _, condition := range arov1alpha1.ClusterChecksTypes() {
-				conditions.IsTrue(co.Status.Conditions, condition)
 				if !conditions.IsTrue(co.Status.Conditions, condition) {
 					valid = false
 				}

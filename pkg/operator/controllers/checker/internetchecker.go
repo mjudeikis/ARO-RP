@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/Azure/ARO-RP/pkg/operator"
@@ -94,19 +94,19 @@ func (r *InternetChecker) Check(ctx context.Context) error {
 		}
 	}
 
-	var condition *corev1.PodCondition
+	var condition *operatorv1.OperatorCondition
 
 	if checkFailed {
-		condition = &corev1.PodCondition{
+		condition = &operatorv1.OperatorCondition{
 			Type:    r.conditionType(),
-			Status:  corev1.ConditionFalse,
+			Status:  operatorv1.ConditionFalse,
 			Message: sb.String(),
 			Reason:  "CheckFailed",
 		}
 	} else {
-		condition = &corev1.PodCondition{
+		condition = &operatorv1.OperatorCondition{
 			Type:    r.conditionType(),
-			Status:  corev1.ConditionTrue,
+			Status:  operatorv1.ConditionTrue,
 			Message: "Outgoing connection successful",
 			Reason:  "CheckDone",
 		}
@@ -162,14 +162,14 @@ func (r *InternetChecker) checkOnce(client simpleHTTPClient, url string, timeout
 	return nil
 }
 
-func (r *InternetChecker) conditionType() (ctype corev1.PodConditionType) {
+func (r *InternetChecker) conditionType() (ctype string) {
 	switch r.role {
 	case operator.RoleMaster:
-		return arov1alpha1.InternetReachableFromMaster
+		return arov1alpha1.InternetReachableFromMaster.String()
 	case operator.RoleWorker:
-		return arov1alpha1.InternetReachableFromWorker
+		return arov1alpha1.InternetReachableFromWorker.String()
 	default:
 		r.log.Warnf("unknown role %s, assuming worker role", r.role)
-		return arov1alpha1.InternetReachableFromWorker
+		return arov1alpha1.InternetReachableFromWorker.String()
 	}
 }

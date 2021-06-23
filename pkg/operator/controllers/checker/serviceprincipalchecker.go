@@ -7,9 +7,9 @@ import (
 	"context"
 
 	"github.com/Azure/go-autorest/autorest/azure"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	maoclient "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -46,9 +46,9 @@ func (r *ServicePrincipalChecker) Name() string {
 }
 
 func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
-	cond := &corev1.PodCondition{
-		Type:    arov1alpha1.ServicePrincipalValid,
-		Status:  corev1.ConditionTrue,
+	cond := &operatorv1.OperatorCondition{
+		Type:    arov1alpha1.ServicePrincipalValid.String(),
+		Status:  operatorv1.ConditionTrue,
 		Message: "service principal is valid",
 		Reason:  "CheckDone",
 	}
@@ -91,8 +91,8 @@ func (r *ServicePrincipalChecker) Check(ctx context.Context) error {
 	return conditions.SetCondition(ctx, r.arocli, cond, r.role)
 }
 
-func updateFailedCondition(cond *corev1.PodCondition, err error) {
-	cond.Status = corev1.ConditionFalse
+func updateFailedCondition(cond *operatorv1.OperatorCondition, err error) {
+	cond.Status = operatorv1.ConditionFalse
 	if tErr, ok := err.(*api.CloudError); ok {
 		cond.Message = tErr.Message
 	} else {

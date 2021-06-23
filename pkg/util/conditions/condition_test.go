@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/clock"
 
@@ -22,6 +22,7 @@ func TestSetCondition(t *testing.T) {
 	ctx := context.Background()
 	role := "master"
 	objectName := "cluster"
+	version := "unknown"
 
 	kubeclock = &clock.FakeClock{}
 	var transitionTime metav1.Time = metav1.Time{Time: kubeclock.Now()}
@@ -29,9 +30,9 @@ func TestSetCondition(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		aroclient aroclient.Interface
-		input     corev1.PodCondition
+		input     operatorv1.OperatorCondition
 
-		expected []corev1.PodCondition
+		expected arov1alpha1.ClusterStatus
 		wantErr  error
 	}{
 		{
@@ -41,7 +42,36 @@ func TestSetCondition(t *testing.T) {
 					Name: objectName,
 				},
 			}),
-			expected: []corev1.PodCondition{},
+			expected: arov1alpha1.ClusterStatus{
+				OperatorVersion: version,
+				Conditions:      []operatorv1.OperatorCondition{},
+			},
+		},
+		{
+			name: "clean on version change",
+			aroclient: arofake.NewSimpleClientset(&arov1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: objectName,
+				},
+				Status: arov1alpha1.ClusterStatus{
+					Conditions: []operatorv1.OperatorCondition{
+						{
+							Type:   arov1alpha1.InternetReachableFromMaster.String(),
+							Status: operatorv1.ConditionFalse,
+						},
+					},
+					OperatorVersion: "?",
+				},
+			}),
+			expected: arov1alpha1.ClusterStatus{
+				Conditions: []operatorv1.OperatorCondition{
+					{
+						Type:   arov1alpha1.InternetReachableFromMaster.String(),
+						Status: operatorv1.ConditionFalse,
+					},
+				},
+				OperatorVersion: version,
+			},
 		},
 		{
 			name: "noop with condition",
@@ -50,81 +80,90 @@ func TestSetCondition(t *testing.T) {
 					Name: objectName,
 				},
 				Status: arov1alpha1.ClusterStatus{
-					Conditions: []corev1.PodCondition{
+					Conditions: []operatorv1.OperatorCondition{
 						{
-							Type:   arov1alpha1.InternetReachableFromMaster,
-							Status: corev1.ConditionFalse,
+							Type:   arov1alpha1.InternetReachableFromMaster.String(),
+							Status: operatorv1.ConditionFalse,
 						},
 					},
 				},
 			}),
-			expected: []corev1.PodCondition{
-				{
-					Type:   arov1alpha1.InternetReachableFromMaster,
-					Status: corev1.ConditionFalse,
+			expected: arov1alpha1.ClusterStatus{
+				Conditions: []operatorv1.OperatorCondition{
+					{
+						Type:   arov1alpha1.InternetReachableFromMaster.String(),
+						Status: operatorv1.ConditionFalse,
+					},
 				},
+				OperatorVersion: version,
 			},
 		},
 		{
-			name: "with condition change",
+			name: "change with condition",
 			aroclient: arofake.NewSimpleClientset(&arov1alpha1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: objectName,
 				},
 				Status: arov1alpha1.ClusterStatus{
-					Conditions: []corev1.PodCondition{
+					Conditions: []operatorv1.OperatorCondition{
 						{
-							Type:   arov1alpha1.InternetReachableFromMaster,
-							Status: corev1.ConditionFalse,
+							Type:   arov1alpha1.InternetReachableFromMaster.String(),
+							Status: operatorv1.ConditionFalse,
 						},
 					},
 				},
 			}),
-			input: corev1.PodCondition{
-				Type:   arov1alpha1.InternetReachableFromMaster,
-				Status: corev1.ConditionTrue,
+			input: operatorv1.OperatorCondition{
+				Type:   arov1alpha1.InternetReachableFromMaster.String(),
+				Status: operatorv1.ConditionTrue,
 			},
-			expected: []corev1.PodCondition{
-				{
-					Type:               arov1alpha1.InternetReachableFromMaster,
-					Status:             corev1.ConditionTrue,
-					LastTransitionTime: transitionTime,
+			expected: arov1alpha1.ClusterStatus{
+				Conditions: []operatorv1.OperatorCondition{
+					{
+						Type:               arov1alpha1.InternetReachableFromMaster.String(),
+						Status:             operatorv1.ConditionTrue,
+						LastTransitionTime: transitionTime,
+					},
 				},
+				OperatorVersion: version,
 			},
 		},
 		{
-			name: "preserve with condition change",
+			name: "preserve with condition",
 			aroclient: arofake.NewSimpleClientset(&arov1alpha1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: objectName,
 				},
 				Status: arov1alpha1.ClusterStatus{
-					Conditions: []corev1.PodCondition{
+					Conditions: []operatorv1.OperatorCondition{
 						{
-							Type:   arov1alpha1.InternetReachableFromMaster,
-							Status: corev1.ConditionFalse,
+							Type:   arov1alpha1.InternetReachableFromMaster.String(),
+							Status: operatorv1.ConditionFalse,
 						},
 						{
-							Type:   arov1alpha1.MachineValid,
-							Status: corev1.ConditionFalse,
+							Type:   arov1alpha1.MachineValid.String(),
+							Status: operatorv1.ConditionFalse,
 						},
 					},
 				},
 			}),
-			input: corev1.PodCondition{
-				Type:   arov1alpha1.InternetReachableFromMaster,
-				Status: corev1.ConditionTrue,
+			input: operatorv1.OperatorCondition{
+				Type:   arov1alpha1.InternetReachableFromMaster.String(),
+				Status: operatorv1.ConditionTrue,
 			},
-			expected: []corev1.PodCondition{
-				{
-					Type:               arov1alpha1.InternetReachableFromMaster,
-					Status:             corev1.ConditionTrue,
-					LastTransitionTime: transitionTime,
+			expected: arov1alpha1.ClusterStatus{
+				Conditions: []operatorv1.OperatorCondition{
+					{
+						Type:               arov1alpha1.InternetReachableFromMaster.String(),
+						Status:             operatorv1.ConditionTrue,
+						LastTransitionTime: transitionTime,
+					},
+					{
+						Type:   arov1alpha1.MachineValid.String(),
+						Status: operatorv1.ConditionFalse,
+					},
 				},
-				{
-					Type:   arov1alpha1.MachineValid,
-					Status: corev1.ConditionFalse,
-				},
+				OperatorVersion: version,
 			},
 		},
 	} {
@@ -140,8 +179,8 @@ func TestSetCondition(t *testing.T) {
 				t.Fatal(err.Error())
 			}
 
-			if !reflect.DeepEqual(result.Status.Conditions, tt.expected) {
-				t.Fatal(cmp.Diff(result.Status.Conditions, tt.expected))
+			if !reflect.DeepEqual(result.Status, tt.expected) {
+				t.Fatal(cmp.Diff(result.Status, tt.expected))
 			}
 		})
 	}
@@ -150,17 +189,17 @@ func TestSetCondition(t *testing.T) {
 func TestIsConditions(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
-		conditions []corev1.PodCondition
-		t          corev1.PodConditionType
-		f          func([]corev1.PodCondition, corev1.PodConditionType) bool
+		conditions []operatorv1.OperatorCondition
+		t          arov1alpha1.CondititionType
+		f          func([]operatorv1.OperatorCondition, arov1alpha1.CondititionType) bool
 		expect     bool
 	}{
 		{
 			name: "IsTrue - non-existing",
-			conditions: []corev1.PodCondition{
+			conditions: []operatorv1.OperatorCondition{
 				{
-					Type:   arov1alpha1.InternetReachableFromWorker,
-					Status: corev1.ConditionTrue,
+					Type:   arov1alpha1.InternetReachableFromWorker.String(),
+					Status: operatorv1.ConditionTrue,
 				},
 			},
 			t:      arov1alpha1.InternetReachableFromMaster,
@@ -169,10 +208,10 @@ func TestIsConditions(t *testing.T) {
 		},
 		{
 			name: "IsTrue - true",
-			conditions: []corev1.PodCondition{
+			conditions: []operatorv1.OperatorCondition{
 				{
-					Type:   arov1alpha1.InternetReachableFromMaster,
-					Status: corev1.ConditionTrue,
+					Type:   arov1alpha1.InternetReachableFromMaster.String(),
+					Status: operatorv1.ConditionTrue,
 				},
 			},
 			t:      arov1alpha1.InternetReachableFromMaster,
@@ -181,10 +220,10 @@ func TestIsConditions(t *testing.T) {
 		},
 		{
 			name: "IsTrue - false",
-			conditions: []corev1.PodCondition{
+			conditions: []operatorv1.OperatorCondition{
 				{
-					Type:   arov1alpha1.InternetReachableFromMaster,
-					Status: corev1.ConditionFalse,
+					Type:   arov1alpha1.InternetReachableFromMaster.String(),
+					Status: operatorv1.ConditionFalse,
 				},
 			},
 			t:      arov1alpha1.InternetReachableFromMaster,
@@ -193,10 +232,10 @@ func TestIsConditions(t *testing.T) {
 		},
 		{
 			name: "IsFalse - true",
-			conditions: []corev1.PodCondition{
+			conditions: []operatorv1.OperatorCondition{
 				{
-					Type:   arov1alpha1.InternetReachableFromMaster,
-					Status: corev1.ConditionFalse,
+					Type:   arov1alpha1.InternetReachableFromMaster.String(),
+					Status: operatorv1.ConditionFalse,
 				},
 			},
 			t:      arov1alpha1.InternetReachableFromMaster,
@@ -205,10 +244,10 @@ func TestIsConditions(t *testing.T) {
 		},
 		{
 			name: "IsFalse - false",
-			conditions: []corev1.PodCondition{
+			conditions: []operatorv1.OperatorCondition{
 				{
-					Type:   arov1alpha1.InternetReachableFromMaster,
-					Status: corev1.ConditionTrue,
+					Type:   arov1alpha1.InternetReachableFromMaster.String(),
+					Status: operatorv1.ConditionTrue,
 				},
 			},
 			t:      arov1alpha1.InternetReachableFromMaster,

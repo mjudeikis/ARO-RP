@@ -4,27 +4,33 @@ package v1alpha1
 // Licensed under the Apache License 2.0.
 
 import (
-	corev1 "k8s.io/api/core/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	SingletonClusterName                                = "cluster"
-	InternetReachableFromMaster corev1.PodConditionType = "InternetReachableFromMaster"
-	InternetReachableFromWorker corev1.PodConditionType = "InternetReachableFromWorker"
-	MachineValid                corev1.PodConditionType = "MachineValid"
-	ServicePrincipalValid       corev1.PodConditionType = "ServicePrincipalValid"
+	SingletonClusterName                        = "cluster"
+	InternetReachableFromMaster CondititionType = "InternetReachableFromMaster"
+	InternetReachableFromWorker CondititionType = "InternetReachableFromWorker"
+	MachineValid                CondititionType = "MachineValid"
+	ServicePrincipalValid       CondititionType = "ServicePrincipalValid"
 )
+
+type CondititionType string
+
+func (c CondititionType) String() string {
+	return string(c)
+}
 
 // AllConditionTypes is a operator conditions currently in use, any condition not in this list is not
 // added to the operator.status.conditions list
-func AllConditionTypes() []corev1.PodConditionType {
-	return []corev1.PodConditionType{InternetReachableFromMaster, InternetReachableFromWorker, MachineValid, ServicePrincipalValid}
+func AllConditionTypes() []CondititionType {
+	return []CondititionType{InternetReachableFromMaster, InternetReachableFromWorker, MachineValid, ServicePrincipalValid}
 }
 
 // ClusterChecksTypes represents checks performed on the cluster to verify basic functionality
-func ClusterChecksTypes() []corev1.PodConditionType {
-	return []corev1.PodConditionType{InternetReachableFromMaster, InternetReachableFromWorker, MachineValid, ServicePrincipalValid}
+func ClusterChecksTypes() []CondititionType {
+	return []CondititionType{InternetReachableFromMaster, InternetReachableFromWorker, MachineValid, ServicePrincipalValid}
 }
 
 type GenevaLoggingSpec struct {
@@ -72,9 +78,9 @@ type FeaturesSpec struct {
 
 // ClusterStatus defines the observed state of Cluster
 type ClusterStatus struct {
-	OperatorVersion   string                `json:"operatorVersion,omitempty"`
-	Conditions        []corev1.PodCondition `json:"conditions,omitempty"`
-	RedHatKeysPresent []string              `json:"redHatKeysPresent,omitempty"`
+	OperatorVersion   string                         `json:"operatorVersion,omitempty"`
+	Conditions        []operatorv1.OperatorCondition `json:"conditions,omitempty"`
+	RedHatKeysPresent []string                       `json:"redHatKeysPresent,omitempty"`
 }
 
 // +kubebuilder:object:root=true
