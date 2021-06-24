@@ -4,8 +4,8 @@ package monitoring
 // Licensed under the Apache License 2.0.
 
 import (
+	"bytes"
 	"context"
-	"reflect"
 
 	"github.com/ghodss/yaml"
 	"github.com/sirupsen/logrus"
@@ -38,20 +38,16 @@ type Config struct {
 	api.MissingFields
 	PrometheusK8s struct {
 		api.MissingFields
-		Retention           string `json:"retention,omitempty"`
-		VolumeClaimTemplate struct {
-			api.MissingFields
+		Retention           *string `json:"retention,omitempty"`
+		VolumeClaimTemplate *struct {
 		} `json:"volumeClaimTemplate,omitempty"`
 	} `json:"prometheusK8s,omitempty"`
 	AlertManagerMain struct {
 		api.MissingFields
-		VolumeClaimTemplate struct {
-			api.MissingFields
+		VolumeClaimTemplate *struct {
 		} `json:"volumeClaimTemplate,omitempty"`
 	} `json:"alertmanagerMain,omitempty"`
 }
-
-var defaultConfig = `prometheusK8s: {}`
 
 type Reconciler struct {
 	arocli        aroclient.Interface
@@ -74,6 +70,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
 	if cm.Data == nil {
 		cm.Data = map[string]string{}
 	}
@@ -89,31 +86,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return reconcile.Result{}, err
 	}
 
-	changed := false
-	// we are disabling persistence. We use omitempty on the struct to
-	// clean the fields
-	if configData.PrometheusK8s.Retention != "" {
-		configData.PrometheusK8s.Retention = ""
-		changed = true
-	}
-	if !reflect.DeepEqual(configData.PrometheusK8s.VolumeClaimTemplate, struct{ api.MissingFields }{}) {
-		configData.PrometheusK8s.VolumeClaimTemplate = struct{ api.MissingFields }{}
-		changed = true
-	}
-
-	if !reflect.DeepEqual(configData.AlertManagerMain.VolumeClaimTemplate, struct{ api.MissingFields }{}) {
-		configData.AlertManagerMain.VolumeClaimTemplate = struct{ api.MissingFields }{}
-		changed = true
-	}
-
-	if !isCreate && !changed {
-		return reconcile.Result{}, nil
-	}
+	// Nil out the fields we don't want set
+	configData.AlertManagerMain.VolumeClaimTemplate = nil
+	configData.PrometheusK8s.Retention = nil
+	configData.PrometheusK8s.VolumeClaimTemplate = nil
 
 	var b []byte
 	err = codec.NewEncoderBytes(&b, r.jsonHandle).Encode(configData)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	changed := !bytes.Equal(b, configDataJSON)
+
+	if !isCreate && !changed {
+		return reconcile.Result{}, nil
 	}
 
 	cmYaml, err := yaml.JSONToYAML(b)
@@ -140,9 +127,7 @@ func (r *Reconciler) monitoringConfigMap(ctx context.Context) (*corev1.ConfigMap
 				Name:      monitoringName.Name,
 				Namespace: monitoringName.Namespace,
 			},
-			Data: map[string]string{
-				"config.yaml": defaultConfig,
-			},
+			Data: nil,
 		}, true, nil
 	}
 	if err != nil {
