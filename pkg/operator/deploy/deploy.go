@@ -190,6 +190,10 @@ func (o *operator) resources() ([]runtime.Object, error) {
 				},
 				APIIntIP:  o.oc.Properties.APIServerProfile.IntIP,
 				IngressIP: o.oc.Properties.IngressProfiles[0].IP,
+				Features: arov1alpha1.FeaturesSpec{
+					ReconcileMonitoring: true,
+					ReconcileNSGs:       false, // TODO(Makdaam): Enable this
+				},
 			},
 		},
 	), nil

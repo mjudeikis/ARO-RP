@@ -16,10 +16,25 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	arov1alpha1 "github.com/Azure/ARO-RP/pkg/operator/apis/aro.openshift.io/v1alpha1"
+	arofake "github.com/Azure/ARO-RP/pkg/operator/clientset/versioned/fake"
 	"github.com/Azure/ARO-RP/pkg/util/cmp"
 )
 
-var cmMetadata = metav1.ObjectMeta{Name: "cluster-monitoring-config", Namespace: "openshift-monitoring"}
+var (
+	cmMetadata = metav1.ObjectMeta{Name: "cluster-monitoring-config", Namespace: "openshift-monitoring"}
+
+	arocli = arofake.NewSimpleClientset(&arov1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: arov1alpha1.SingletonClusterName,
+		},
+		Spec: arov1alpha1.ClusterSpec{
+			Features: arov1alpha1.FeaturesSpec{
+				ReconcileMonitoring: true,
+			},
+		},
+	})
+)
 
 func TestReconcileMonitoringConfig(t *testing.T) {
 	log := logrus.NewEntry(logrus.StandardLogger())
@@ -34,6 +49,7 @@ func TestReconcileMonitoringConfig(t *testing.T) {
 			name: "ConfigMap does not exist - enable",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli:        arocli,
 					kubernetescli: fake.NewSimpleClientset(),
 					log:           log,
 					jsonHandle:    new(codec.JsonHandle),
@@ -45,6 +61,7 @@ func TestReconcileMonitoringConfig(t *testing.T) {
 			name: "empty config.yaml",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.ConfigMap{
 						ObjectMeta: cmMetadata,
 						Data: map[string]string{
@@ -61,6 +78,7 @@ func TestReconcileMonitoringConfig(t *testing.T) {
 			name: "settings restored to default and extra fields are preserved",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.ConfigMap{
 						ObjectMeta: cmMetadata,
 						Data: map[string]string{
@@ -106,6 +124,7 @@ prometheusK8s:
 			name: "empty volumeClaimTemplate struct is cleared out",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.ConfigMap{
 						ObjectMeta: cmMetadata,
 						Data: map[string]string{
@@ -134,6 +153,7 @@ prometheusK8s:
 			name: "empty volumeClaimTemplate cleared out part 2",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.ConfigMap{
 						ObjectMeta: cmMetadata,
 						Data: map[string]string{
@@ -168,6 +188,7 @@ prometheusK8s:
 			name: "other monitoring components are configured",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.ConfigMap{
 						ObjectMeta: cmMetadata,
 						Data: map[string]string{
@@ -229,6 +250,7 @@ func TestReconcilePVC(t *testing.T) {
 			name: "Should delete the prometheus PVCs",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "prometheus-k8s-db-prometheus-k8s-0",
@@ -260,6 +282,7 @@ func TestReconcilePVC(t *testing.T) {
 			name: "Should preserve 1 pvc",
 			reconciler: func() *Reconciler {
 				return &Reconciler{
+					arocli: arocli,
 					kubernetescli: fake.NewSimpleClientset(&corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "prometheus-k8s-db-prometheus-k8s-0",
