@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/ARO-RP/pkg/database"
 	"github.com/Azure/ARO-RP/pkg/env"
 	"github.com/Azure/ARO-RP/pkg/metrics/noop"
+	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/features"
 	"github.com/Azure/ARO-RP/pkg/util/azureclient/mgmt/network"
 	"github.com/Azure/ARO-RP/pkg/util/encryption"
 	"github.com/Azure/ARO-RP/pkg/util/keyvault"
@@ -30,6 +31,7 @@ type sshTool struct {
 
 	interfaces    network.InterfacesClient
 	loadBalancers network.LoadBalancersClient
+	deployments   features.DeploymentsClient
 
 	clusterResourceGroup string
 	infraID              string
@@ -58,6 +60,7 @@ func newSSHTool(log *logrus.Entry, env env.Interface, oc *api.OpenShiftCluster, 
 
 		interfaces:    network.NewInterfacesClient(env.Environment(), r.SubscriptionID, fpAuthorizer),
 		loadBalancers: network.NewLoadBalancersClient(env.Environment(), r.SubscriptionID, fpAuthorizer),
+		deployments:   features.NewDeploymentsClient(env.Environment(), r.SubscriptionID, fpAuthorizer),
 
 		clusterResourceGroup: stringutils.LastTokenByte(oc.Properties.ClusterProfile.ResourceGroupID, '/'),
 		infraID:              infraID,
@@ -66,8 +69,7 @@ func newSSHTool(log *logrus.Entry, env env.Interface, oc *api.OpenShiftCluster, 
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage:\n")
-	fmt.Fprintf(os.Stderr, "  %s enable resourceid\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s disable resourceid\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s deploy resourceid\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s shell resourceid\n", os.Args[0])
 }
 
@@ -119,6 +121,7 @@ func getCluster(ctx context.Context, log *logrus.Entry, _env env.Core, resourceI
 		return nil, nil, err
 	}
 
+	log.Println(strings.ToLower(resourceID))
 	doc, err := dbOpenShiftClusters.Get(ctx, strings.ToLower(resourceID))
 	if err != nil {
 		return nil, nil, err
@@ -127,8 +130,14 @@ func getCluster(ctx context.Context, log *logrus.Entry, _env env.Core, resourceI
 		return nil, nil, fmt.Errorf("resource %q not found", resourceID)
 	}
 
-	subDoc, err := dbSubscriptions.Get(ctx, strings.ToLower(resourceID))
+	r, err := azure.ParseResourceID(doc.Key)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	subDoc, err := dbSubscriptions.Get(ctx, r.SubscriptionID)
+	if err != nil {
+		log.Error(err)
 		return nil, nil, err
 	}
 	if subDoc == nil {
@@ -160,12 +169,10 @@ func run(ctx context.Context, log *logrus.Entry) error {
 	}
 
 	switch strings.ToLower(os.Args[1]) {
-	case "disable":
-		return s.disable(ctx)
-	case "enable":
-		return s.enable(ctx)
+	case "deploy":
+		return s.deploy(ctx)
 	case "shell":
-		return s.shell(ctx)
+		return s.shell(ctx, log)
 	default:
 		usage()
 		os.Exit(2)

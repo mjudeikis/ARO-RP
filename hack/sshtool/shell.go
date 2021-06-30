@@ -8,15 +8,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/sirupsen/logrus"
 )
 
-func (s *sshTool) shell(ctx context.Context) error {
+func (s *sshTool) shell(ctx context.Context, log *logrus.Entry) error {
 	err := s.kubeconfig()
 	if err != nil {
 		return err
 	}
 
-	err = s.az()
+	err = s.az(ctx, log)
 	if err != nil {
 		s.log.Warn(err)
 	}
@@ -26,6 +28,8 @@ func (s *sshTool) shell(ctx context.Context) error {
 		return err
 	}
 	defer done()
+
+	// This is where We can add adhoc code todo things.
 
 	fmt.Printf("ssh -A -p 2200 core@%s\n", s.oc.Properties.NetworkProfile.APIServerPrivateEndpointIP)
 

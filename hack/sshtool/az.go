@@ -5,12 +5,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
 
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/creack/pty"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Azure/ARO-RP/pkg/util/stringutils"
 )
@@ -35,13 +37,14 @@ func expect(r io.Reader, expected []byte) error {
 	return nil
 }
 
-func (s *sshTool) az() error {
+func (s *sshTool) az(ctx context.Context, log *logrus.Entry) error {
 	spp := s.oc.Properties.ServicePrincipalProfile
 
 	cmd := exec.Command("az", "login", "--service-principal", "-u", string(spp.ClientID), "-t", string(s.sub.Properties.TenantID))
 
 	pty, err := pty.Start(cmd)
 	if err != nil {
+		log.Error(err)
 		return err
 	}
 

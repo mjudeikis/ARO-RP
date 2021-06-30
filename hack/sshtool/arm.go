@@ -5,182 +5,130 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"encoding/json"
+	"net/http"
 
-	mgmtnetwork "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-07-01/network"
+	mgmtauthorization "github.com/Azure/azure-sdk-for-go/services/preview/authorization/mgmt/2018-09-01-preview/authorization"
+	mgmtfeatures "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-07-01/features"
+	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/to"
 
 	"github.com/Azure/ARO-RP/pkg/api"
+	"github.com/Azure/ARO-RP/pkg/util/arm"
+	"github.com/Azure/ARO-RP/pkg/util/azureclient"
+	"github.com/Azure/ARO-RP/pkg/util/azureerrors"
 	"github.com/Azure/ARO-RP/pkg/util/stringutils"
 )
 
-func (s *sshTool) disable(ctx context.Context) error {
-	var lbName string
-	switch s.oc.Properties.ArchitectureVersion {
-	case api.ArchitectureVersionV1:
-		lbName = s.infraID + "-internal-lb"
-	case api.ArchitectureVersionV2:
-		lbName = s.infraID + "-internal"
-	default:
-		return fmt.Errorf("unknown architecture version %d", s.oc.Properties.ArchitectureVersion)
-	}
+// deploy is intended to test customer actions on the cluster
+func (s *sshTool) deploy(ctx context.Context) error {
 
-	for i := 0; i < 3; i++ {
-		nicName := fmt.Sprintf("%s-master%d-nic", s.infraID, i)
+	resourceGroup := stringutils.LastTokenByte(s.oc.Properties.ClusterProfile.ResourceGroupID, '/')
 
-		nic, err := s.interfaces.Get(ctx, s.clusterResourceGroup, nicName, "")
-		if err != nil {
-			return err
-		}
-
-		disableNIC(&nic)
-
-		s.log.Printf("updating %s", nicName)
-		err = s.interfaces.CreateOrUpdateAndWait(ctx, s.clusterResourceGroup, nicName, nic)
-		if err != nil {
-			return err
-		}
-	}
-
-	lb, err := s.loadBalancers.Get(ctx, s.clusterResourceGroup, lbName, "")
-	if err != nil {
-		return err
-	}
-
-	disableLB(&lb)
-
-	s.log.Printf("updating %s", lbName)
-	return s.loadBalancers.CreateOrUpdateAndWait(ctx, s.clusterResourceGroup, lbName, lb)
-}
-
-func (s *sshTool) enable(ctx context.Context) error {
-	var lbName string
-	switch s.oc.Properties.ArchitectureVersion {
-	case api.ArchitectureVersionV1:
-		lbName = s.infraID + "-internal-lb"
-	case api.ArchitectureVersionV2:
-		lbName = s.infraID + "-internal"
-	default:
-		return fmt.Errorf("unknown architecture version %d", s.oc.Properties.ArchitectureVersion)
-	}
-
-	lb, err := s.loadBalancers.Get(ctx, s.clusterResourceGroup, lbName, "")
-	if err != nil {
-		return err
-	}
-
-	enableLB(&lb)
-
-	s.log.Printf("updating %s", lbName)
-	err = s.loadBalancers.CreateOrUpdateAndWait(ctx, s.clusterResourceGroup, lbName, lb)
-	if err != nil {
-		return err
-	}
-
-	for i := 0; i < 3; i++ {
-		nicName := fmt.Sprintf("%s-master%d-nic", s.infraID, i)
-
-		nic, err := s.interfaces.Get(ctx, s.clusterResourceGroup, nicName, "")
-		if err != nil {
-			return err
-		}
-
-		enableNIC(&nic, &lb, i)
-
-		s.log.Printf("updating %s", nicName)
-		err = s.interfaces.CreateOrUpdateAndWait(ctx, s.clusterResourceGroup, nicName, nic)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func disableNIC(nic *mgmtnetwork.Interface) {
-	backendAddressPools := make([]mgmtnetwork.BackendAddressPool, 0, len(*(*nic.IPConfigurations)[0].LoadBalancerBackendAddressPools))
-	for _, p := range *(*nic.IPConfigurations)[0].LoadBalancerBackendAddressPools {
-		name := stringutils.LastTokenByte(*p.ID, '/')
-		if !strings.HasPrefix(name, "ssh-") {
-			backendAddressPools = append(backendAddressPools, p)
-		}
-	}
-
-	(*nic.IPConfigurations)[0].LoadBalancerBackendAddressPools = &backendAddressPools
-}
-
-func enableNIC(nic *mgmtnetwork.Interface, lb *mgmtnetwork.LoadBalancer, i int) {
-	disableNIC(nic)
-
-	*(*nic.IPConfigurations)[0].LoadBalancerBackendAddressPools = append(*(*nic.IPConfigurations)[0].LoadBalancerBackendAddressPools, mgmtnetwork.BackendAddressPool{
-		ID: to.StringPtr(fmt.Sprintf("%s/backendAddressPools/ssh-%d", *lb.ID, i)),
-	})
-}
-
-func disableLB(lb *mgmtnetwork.LoadBalancer) {
-	backendAddressPools := make([]mgmtnetwork.BackendAddressPool, 0, len(*lb.BackendAddressPools))
-	for _, p := range *lb.BackendAddressPools {
-		if !strings.HasPrefix(*p.Name, "ssh-") {
-			backendAddressPools = append(backendAddressPools, p)
-		}
-	}
-	*lb.BackendAddressPools = backendAddressPools
-
-	loadBalancingRules := make([]mgmtnetwork.LoadBalancingRule, 0, len(*lb.LoadBalancingRules))
-	for _, c := range *lb.LoadBalancingRules {
-		if !strings.HasPrefix(*c.Name, "ssh-") {
-			loadBalancingRules = append(loadBalancingRules, c)
-		}
-	}
-	*lb.LoadBalancingRules = loadBalancingRules
-
-	probes := make([]mgmtnetwork.Probe, 0, len(*lb.Probes))
-	for _, p := range *lb.Probes {
-		if *p.Name != "ssh" {
-			probes = append(probes, p)
-		}
-	}
-	*lb.Probes = probes
-}
-
-func enableLB(lb *mgmtnetwork.LoadBalancer) {
-	disableLB(lb)
-
-	for i := int32(0); i < 3; i++ {
-		*lb.BackendAddressPools = append(*lb.BackendAddressPools, mgmtnetwork.BackendAddressPool{
-			Name: to.StringPtr(fmt.Sprintf("ssh-%d", i)),
-		})
-
-		*lb.LoadBalancingRules = append(*lb.LoadBalancingRules, mgmtnetwork.LoadBalancingRule{
-			LoadBalancingRulePropertiesFormat: &mgmtnetwork.LoadBalancingRulePropertiesFormat{
-				FrontendIPConfiguration: &mgmtnetwork.SubResource{
-					ID: (*lb.FrontendIPConfigurations)[0].ID,
-				},
-				BackendAddressPool: &mgmtnetwork.SubResource{
-					ID: to.StringPtr(fmt.Sprintf("%s/backendAddressPools/ssh-%d", *lb.ID, i)),
-				},
-				Probe: &mgmtnetwork.SubResource{
-					ID: to.StringPtr(*lb.ID + "/probes/ssh"),
-				},
-				Protocol:             mgmtnetwork.TransportProtocolTCP,
-				LoadDistribution:     mgmtnetwork.LoadDistributionDefault,
-				FrontendPort:         to.Int32Ptr(2200 + i),
-				BackendPort:          to.Int32Ptr(22),
-				IdleTimeoutInMinutes: to.Int32Ptr(30),
-				DisableOutboundSnat:  to.BoolPtr(true),
-			},
-			Name: to.StringPtr(fmt.Sprintf("ssh-%d", i)),
-		})
-	}
-
-	*lb.Probes = append(*lb.Probes, mgmtnetwork.Probe{
-		ProbePropertiesFormat: &mgmtnetwork.ProbePropertiesFormat{
-			Protocol:          mgmtnetwork.ProbeProtocolTCP,
-			Port:              to.Int32Ptr(22),
-			IntervalInSeconds: to.Int32Ptr(10),
-			NumberOfProbes:    to.Int32Ptr(3),
+	t := &arm.Template{
+		Schema:         "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+		ContentVersion: "1.0.0.0",
+		Resources: []*arm.Resource{
+			s.denyAssignment(),
 		},
-		Name: to.StringPtr("ssh"),
+	}
+
+	return s.deployARMTemplate(ctx, resourceGroup, "storage", t, nil)
+
+}
+
+func (s *sshTool) deployARMTemplate(ctx context.Context, resourceGroupName string, deploymentName string, template *arm.Template, parameters map[string]interface{}) error {
+	s.log.Printf("deploying %s template", deploymentName)
+	err := s.deployments.CreateOrUpdateAndWait(ctx, resourceGroupName, deploymentName, mgmtfeatures.Deployment{
+		Properties: &mgmtfeatures.DeploymentProperties{
+			Template:   template,
+			Parameters: parameters,
+			Mode:       mgmtfeatures.Incremental,
+		},
 	})
+
+	if azureerrors.IsDeploymentActiveError(err) {
+		s.log.Printf("waiting for %s template to be deployed", deploymentName)
+		err = s.deployments.Wait(ctx, resourceGroupName, deploymentName)
+	}
+
+	if azureerrors.HasAuthorizationFailedError(err) ||
+		azureerrors.HasLinkedAuthorizationFailedError(err) {
+		return err
+	}
+
+	serviceErr, _ := err.(*azure.ServiceError) // futures return *azure.ServiceError directly
+
+	// CreateOrUpdate() returns a wrapped *azure.ServiceError
+	if detailedErr, ok := err.(autorest.DetailedError); ok {
+		serviceErr, _ = detailedErr.Original.(*azure.ServiceError)
+	}
+
+	if serviceErr != nil {
+		b, _ := json.Marshal(serviceErr)
+
+		return &api.CloudError{
+			StatusCode: http.StatusBadRequest,
+			CloudErrorBody: &api.CloudErrorBody{
+				Code:    api.CloudErrorCodeDeploymentFailed,
+				Message: "Deployment failed.",
+				Details: []api.CloudErrorBody{
+					{
+						Message: string(b),
+					},
+				},
+			},
+		}
+	}
+
+	return err
+}
+
+func (s *sshTool) denyAssignment() *arm.Resource {
+	return &arm.Resource{
+		Resource: &mgmtauthorization.DenyAssignment{
+			Name: to.StringPtr("[guid(resourceGroup().id, 'ARO cluster resource group deny assignment')]"),
+			Type: to.StringPtr("Microsoft.Authorization/denyAssignments"),
+			DenyAssignmentProperties: &mgmtauthorization.DenyAssignmentProperties{
+				DenyAssignmentName: to.StringPtr("[guid(resourceGroup().id, 'ARO cluster resource group deny assignment')]"),
+				Permissions: &[]mgmtauthorization.DenyAssignmentPermission{
+					{
+						Actions: &[]string{
+							"*/action",
+							"*/delete",
+							"*/write",
+						},
+						NotActions: &[]string{
+							"Microsoft.Compute/disks/beginGetAccess/action",
+							"Microsoft.Compute/disks/endGetAccess/action",
+							"Microsoft.Compute/disks/write",
+							"Microsoft.Compute/snapshots/beginGetAccess/action",
+							"Microsoft.Compute/snapshots/delete",
+							"Microsoft.Compute/snapshots/endGetAccess/action",
+							"Microsoft.Compute/snapshots/write",
+							"Microsoft.Network/networkInterfaces/effectiveRouteTable/action",
+							"Microsoft.Network/networkSecurityGroups/join/action",
+							"Microsoft.Resources/tags/write",
+						},
+					},
+				},
+				Scope: &s.oc.Properties.ClusterProfile.ResourceGroupID,
+				Principals: &[]mgmtauthorization.Principal{
+					{
+						ID:   to.StringPtr("00000000-0000-0000-0000-000000000000"),
+						Type: to.StringPtr("SystemDefined"),
+					},
+				},
+				ExcludePrincipals: &[]mgmtauthorization.Principal{
+					{
+						ID:   &s.oc.Properties.ServicePrincipalProfile.SPObjectID,
+						Type: to.StringPtr("ServicePrincipal"),
+					},
+				},
+				IsSystemProtected: to.BoolPtr(true),
+			},
+		},
+		APIVersion: azureclient.APIVersion("Microsoft.Authorization/denyAssignments"),
+	}
 }
