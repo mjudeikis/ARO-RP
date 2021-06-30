@@ -253,6 +253,9 @@ github.com/coreos/ignition/v2/config/v3_1/types
 github.com/coreos/vcontext/path
 github.com/coreos/vcontext/report
 github.com/coreos/vcontext/tree
+# github.com/creack/pty v1.1.13
+## explicit
+github.com/creack/pty
 # github.com/daixiang0/gci v0.2.4
 github.com/daixiang0/gci/pkg/gci
 # github.com/davecgh/go-spew v1.1.1

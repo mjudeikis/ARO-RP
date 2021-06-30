@@ -27,6 +27,7 @@ require (
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/coreos/ignition/v2 v2.9.0 // indirect
+	github.com/creack/pty v1.1.13
 	github.com/docker/docker v20.10.3+incompatible // indirect
 	github.com/docker/spdystream v0.2.0 // indirect
 	github.com/emicklei/go-restful v2.15.0+incompatible // indirect
